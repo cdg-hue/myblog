@@ -63,8 +63,55 @@ CREATE TABLE categories (
   name TEXT UNIQUE NOT NULL,
   slug TEXT UNIQUE NOT NULL,
   post_count INTEGER DEFAULT 0,
-  name_en TEXT
+  name_en TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 100,
+  show_in_nav INTEGER NOT NULL DEFAULT 0 CHECK(show_in_nav IN (0, 1))
 );
+
+-- Column-owned tags
+CREATE TABLE tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+  name TEXT NOT NULL,
+  name_en TEXT,
+  slug TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 100,
+  UNIQUE(category_id, name),
+  UNIQUE(category_id, slug)
+);
+CREATE TABLE post_tags (
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY(post_id, tag_id)
+);
+CREATE INDEX idx_post_tags_tag ON post_tags(tag_id, post_id);
+
+-- The legacy JSON field remains compatible with Obsidian and existing APIs.
+-- Derive managed tag identities and associations inside the same transaction.
+CREATE TRIGGER posts_tags_ai AFTER INSERT ON posts BEGIN
+  INSERT OR IGNORE INTO tags (category_id, name, slug)
+    SELECT c.id, trim(j.value), 'tag-' || lower(hex(randomblob(6)))
+    FROM categories c, json_each(CASE WHEN json_valid(new.tags) THEN new.tags ELSE '[]' END) j
+    WHERE c.name = new.category AND j.type = 'text' AND trim(j.value) != '';
+  INSERT OR IGNORE INTO post_tags (post_id, tag_id)
+    SELECT new.id, t.id FROM tags t JOIN categories c ON c.id = t.category_id
+    JOIN json_each(CASE WHEN json_valid(new.tags) THEN new.tags ELSE '[]' END) j ON t.name = trim(j.value)
+    WHERE c.name = new.category AND j.type = 'text';
+END;
+CREATE TRIGGER posts_tags_au AFTER UPDATE OF category, tags ON posts BEGIN
+  DELETE FROM post_tags WHERE post_id = new.id;
+  INSERT OR IGNORE INTO tags (category_id, name, slug)
+    SELECT c.id, trim(j.value), 'tag-' || lower(hex(randomblob(6)))
+    FROM categories c, json_each(CASE WHEN json_valid(new.tags) THEN new.tags ELSE '[]' END) j
+    WHERE c.name = new.category AND j.type = 'text' AND trim(j.value) != '';
+  INSERT OR IGNORE INTO post_tags (post_id, tag_id)
+    SELECT new.id, t.id FROM tags t JOIN categories c ON c.id = t.category_id
+    JOIN json_each(CASE WHEN json_valid(new.tags) THEN new.tags ELSE '[]' END) j ON t.name = trim(j.value)
+    WHERE c.name = new.category AND j.type = 'text';
+END;
+CREATE TRIGGER posts_tags_ad AFTER DELETE ON posts BEGIN
+  DELETE FROM post_tags WHERE post_id = old.id;
+END;
 
 -- 站点设置表
 CREATE TABLE site_settings (

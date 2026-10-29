@@ -15,6 +15,7 @@ export interface SiteCategoryLink {
   slug: string
   displayName?: string
   name_en?: string | null
+  show_in_nav?: number
 }
 
 export async function getSiteHeaderData(db: D1Database, language: Language = 'zh-CN'): Promise<{
@@ -53,6 +54,7 @@ export async function getSiteHeaderData(db: D1Database, language: Language = 'zh
         name: category.name,
         slug: category.slug,
         name_en: category.name_en,
+        show_in_nav: category.show_in_nav,
         displayName: language === 'en' ? category.name_en?.trim() || category.name : category.name,
       }))
 

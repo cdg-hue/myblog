@@ -43,6 +43,7 @@ interface InlineArticleEditorProps {
   title: string
   html: string
   category?: string | null
+  tags?: string[]
   coverImage?: string | null
   password?: string | null // 仅用于显示加密状态，不可编辑
   publishedAt?: number    // unix timestamp
@@ -56,6 +57,7 @@ export function InlineArticleEditor({
   title: initialTitle,
   html,
   category,
+  tags = [],
   coverImage: initialCoverImage,
   password,
   publishedAt,
@@ -73,6 +75,8 @@ export function InlineArticleEditor({
   const titleValueRef = useRef(initialTitle)
   const [title, setTitle] = useState(initialTitle)
   const [selectedCategory, setSelectedCategory] = useState(category || '未分类')
+  const [selectedTags, setSelectedTags] = useState(tags)
+  const originalTagsRef = useRef(tags)
   const originalCategoryRef = useRef(category || '未分类')
   const categoryValueRef = useRef(category || '未分类')
   const [coverImage, setCoverImage] = useState(initialCoverImage || '')
@@ -134,6 +138,7 @@ export function InlineArticleEditor({
           html: newHtml,
           content,
           category: selectedCategory,
+          tags: selectedTags,
           cover_image: coverImage || null,
           // 密码管理统一到后台，前台不再修改
         }),
@@ -151,6 +156,7 @@ export function InlineArticleEditor({
       originalHtmlRef.current = newHtml
       originalTitleRef.current = trimmedTitle
       originalCategoryRef.current = selectedCategory
+      originalTagsRef.current = selectedTags
       originalCoverImageRef.current = coverImage
       setDirty(false)
       setFeedback({ type: 'success', message: '已保存' })
@@ -168,6 +174,7 @@ export function InlineArticleEditor({
     editor.commands.setContent(originalHtmlRef.current)
     setTitle(originalTitleRef.current)
     setSelectedCategory(originalCategoryRef.current)
+    setSelectedTags(originalTagsRef.current)
     setCoverImage(originalCoverImageRef.current)
     setDirty(false)
     setFeedback(null)
@@ -465,7 +472,9 @@ export function InlineArticleEditor({
         <CategorySelector
           value={selectedCategory}
           onChange={(val) => {
+            if (val !== selectedCategory && selectedTags.length && !window.confirm('切换栏目会清除当前文章的标签，是否继续？')) return
             setSelectedCategory(val)
+            if (val !== selectedCategory) setSelectedTags([])
             if (editorRef.current) checkDirty(editorRef.current, { category: val })
           }}
         />

@@ -4,6 +4,7 @@ import { getPostsByCategory, getPostsCountByCategory, getPublicCategories } from
 import { getAppCloudflareEnv } from '@/lib/cloudflare'
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
+import { getCategoryTags } from '@/lib/repositories/tags'
 import { Pagination } from '@/components/Pagination'
 import { getSiteHeaderData } from '@/lib/site'
 
@@ -41,10 +42,11 @@ export default async function PublicCategoryPage({
 }: {
   language?: Language
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; tag?: string }>
 }) {
   const { slug } = await params
-  const { page: pageStr } = await searchParams
+  const { page: pageStr, tag } = await searchParams
+  const tagSlug = typeof tag === 'string' ? tag : undefined
   const currentPage = Math.max(1, parseInt(pageStr ?? '1', 10) || 1)
 
   const env = await getAppCloudflareEnv()
@@ -54,18 +56,21 @@ export default async function PublicCategoryPage({
   const category = categories.find((item) => item.slug === slug)
   if (!category) notFound()
 
-  const [posts, totalCount, headerData] = await Promise.all([
-    getPostsByCategory(env.DB, category.name, PAGE_SIZE, (currentPage - 1) * PAGE_SIZE, language),
-    getPostsCountByCategory(env.DB, category.name, language),
+  const [posts, totalCount, headerData, tags] = await Promise.all([
+    getPostsByCategory(env.DB, category.name, PAGE_SIZE, (currentPage - 1) * PAGE_SIZE, language, ...(tagSlug ? [tagSlug] : [])),
+    getPostsCountByCategory(env.DB, category.name, language, ...(tagSlug ? [tagSlug] : [])),
     getSiteHeaderData(env.DB, language),
+    getCategoryTags(env.DB, slug, language),
   ])
+  if (tagSlug && !tags.some(item => item.slug === tagSlug)) notFound()
+  const tagQuery = tagSlug ? `?tag=${encodeURIComponent(tagSlug)}` : ''
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   const t = (text: string) => publicText(language, text)
   const categoryLabel = language === 'en' ? category.name_en?.trim() || t(category.name) : category.name
   return (
-    <PublicLocaleProvider language={language} categories={headerData.categories} switchHref={publicPath(`/category/${encodeURIComponent(slug)}`, getOtherLanguage(language))}>
+    <PublicLocaleProvider language={language} categories={headerData.categories} switchHref={publicPath(`/category/${encodeURIComponent(slug)}${tagQuery}`, getOtherLanguage(language))}>
     <div className="min-h-full flex flex-col bg-[var(--background)]">
       <SiteHeader
         initialTheme={headerData.defaultTheme}
@@ -77,7 +82,7 @@ export default async function PublicCategoryPage({
       <main className="page-main flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 py-10 sm:py-14">
         <div className="mb-8 border-b border-[var(--editor-line)] pb-6">
           <div className="text-xs uppercase tracking-[0.18em] text-[var(--stone-gray)] mb-3">
-            {t('分类')}
+            {t('栏目')}
           </div>
           <h1 className="article-display-title text-3xl sm:text-4xl font-bold text-[var(--editor-ink)] leading-tight">
             {categoryLabel}
@@ -87,9 +92,18 @@ export default async function PublicCategoryPage({
           </p>
         </div>
 
+        <nav aria-label={t('标签')} className="mb-7 flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-[var(--editor-line)]">
+          <Link href={publicPath(`/category/${encodeURIComponent(slug)}`, language)} aria-current={!tagSlug ? 'page' : undefined} className={`border-b-2 py-3 text-sm font-medium ${!tagSlug ? 'border-[var(--editor-accent)] text-[var(--editor-accent)]' : 'border-transparent text-[var(--editor-muted)]'}`}>{t('全部')}</Link>
+          {tags.filter(item => item.post_count > 0 || item.slug === tagSlug).map(item => (
+            <Link key={item.id} href={publicPath(`/category/${encodeURIComponent(slug)}?tag=${encodeURIComponent(item.slug)}`, language)} aria-current={item.slug === tagSlug ? 'page' : undefined} className={`border-b-2 py-3 text-sm ${item.slug === tagSlug ? 'border-[var(--editor-accent)] font-semibold text-[var(--editor-accent)]' : 'border-transparent text-[var(--editor-muted)] hover:text-[var(--editor-ink)]'}`}>
+              {language === 'en' ? item.name_en || item.name : item.name} <span className="text-xs tabular-nums">{item.post_count}</span>
+            </Link>
+          ))}
+        </nav>
+
         {posts.length === 0 ? (
           <div className="py-20 text-center">
-            <p className="text-[var(--editor-muted)] mb-2">{t('这个分类下还没有公开文章')}</p>
+            <p className="text-[var(--editor-muted)] mb-2">{t(tagSlug ? '该标签下还没有公开文章' : '这个栏目下还没有公开文章')}</p>
             <Link
               href={publicPath('/', language)}
               className="text-sm text-[var(--editor-accent)] hover:underline underline-offset-2"
@@ -133,7 +147,7 @@ export default async function PublicCategoryPage({
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
-              basePath={publicPath(`/category/${encodeURIComponent(slug)}`, language)}
+              basePath={publicPath(`/category/${encodeURIComponent(slug)}${tagQuery}`, language)}
               language={language}
             />
           </>

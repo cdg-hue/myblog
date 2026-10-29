@@ -60,13 +60,7 @@ async function runProcessPostAiJob(env: BackgroundJobEnv, postId: number) {
   const updates: Parameters<typeof updatePost>[2] = {}
   const autoDescription = buildAutoDescription(post.content)
 
-  if (!post.category || post.category === '未分类') {
-    updates.category = aiResult.category
-  }
-
-  if (post.tags.length === 0 && aiResult.tags.length > 0) {
-    updates.tags = aiResult.tags
-  }
+  // Column assignment and tag creation require an explicit editor action.
 
   if (!post.description || post.description === autoDescription) {
     updates.description = aiResult.description

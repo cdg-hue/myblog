@@ -7,6 +7,7 @@ import { getRouteContextWithDb, jsonError, jsonOk, parseJsonBody } from '@/lib/s
 import type { NextRequest } from 'next/server'
 import { isLanguage } from '@/lib/i18n'
 import { isTranslationConflict } from '@/lib/repositories/translations'
+import { TaxonomyError } from '@/lib/repositories/tags'
 
 async function checkAuth(req: NextRequest): Promise<boolean> {
   const token = req.cookies.get(COOKIE_NAME)?.value
@@ -118,6 +119,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     return jsonOk({ success: true, slug: nextSlug || slug })
   } catch (err) {
+    if (err instanceof TaxonomyError) return jsonError(err.message, err.status)
     if (isTranslationConflict(err)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (err instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(err.message)) {
       return jsonError('slug 已存在，请换一个', 409)

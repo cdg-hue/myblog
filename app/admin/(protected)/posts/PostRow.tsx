@@ -75,12 +75,15 @@ export function PostRow({ post, categories }: PostRowProps) {
 
   // 更新分类
   const handleCategoryChange = async (newCategory: string) => {
+    const next = newCategory || '未分类'
+    if (next === post.category) return
+    if (post.tags.length && !window.confirm('切换栏目会清除当前文章的标签，是否继续？')) return
     setLoading(true)
     try {
       const res = await fetch(`/api/admin/posts/${post.slug}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: newCategory || null }),
+        body: JSON.stringify({ category: next, tags: [] }),
       })
       if (res.ok) {
         toast.success('分类已更新')

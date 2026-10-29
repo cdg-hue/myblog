@@ -401,6 +401,16 @@ describe('bilingual publishing UI', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'hello', status: 'draft', category: 'notes', language: 'en' })
   })
 
+  it('filters the article list by tag while preserving other filters', async () => {
+    await mount(h(FilterBar, {
+      categories: ['notes'], currentCategory: 'notes', currentStatus: 'draft', initialQuery: 'hello',
+      tags: ['手机卡'], resultCount: 1, counts: { all: 1, published: 0, draft: 1, deleted: 0, encrypted: 0, unlisted: 0, pinned: 0 },
+    }))
+    await input(container.querySelector('select[aria-label="筛选文章标签"]')!, '手机卡')
+    const url = new URL(mocks.push.mock.calls.at(-1)![0], 'https://blog.test')
+    expect(Object.fromEntries(url.searchParams)).toEqual({ q: 'hello', status: 'draft', category: 'notes', tag: '手机卡' })
+  })
+
   it('opens English posts with their localized public URL', async () => {
     await mount(h(PostRow, { categories: [], post: {
       ...original, language: 'en', content: 'body', tags: [], password: null, cover_image: null,

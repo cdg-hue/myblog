@@ -10,6 +10,8 @@ interface Category {
   name_en?: string | null
   slug: string
   post_count: number
+  sort_order?: number
+  show_in_nav?: number
 }
 
 export function CategoryManager({ initialCategories }: { initialCategories: Category[] }) {
@@ -23,6 +25,8 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
   const [editName, setEditName] = useState('')
   const [editNameEn, setEditNameEn] = useState('')
   const [editSlugVal, setEditSlugVal] = useState('')
+  const [editOrder, setEditOrder] = useState(100)
+  const [editVisible, setEditVisible] = useState(false)
   const [deleteModal, setDeleteModal] = useState<{ slug: string; name: string } | null>(null)
   const router = useRouter()
   const toast = useToast()
@@ -37,7 +41,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       const res = await fetch('/api/admin/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), name_en: nameEn.trim(), slug: slug.trim() }),
+        body: JSON.stringify({ name: name.trim(), name_en: nameEn.trim(), slug: slug.trim(), show_in_nav: 1 }),
       })
       if (!res.ok) {
         const data = (await res.json()) as { error?: string }
@@ -48,7 +52,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       setSlug('')
       router.refresh()
       // Optimistic update
-      setCategories((prev) => [...prev, { name: name.trim(), name_en: nameEn.trim(), slug: slug.trim(), post_count: 0 }])
+      setCategories((prev) => [...prev, { name: name.trim(), name_en: nameEn.trim(), slug: slug.trim(), post_count: 0, show_in_nav: 1, sort_order: 100 }])
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建失败')
     } finally {
@@ -89,6 +93,8 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
     setEditName(cat.name)
     setEditNameEn(cat.name_en || '')
     setEditSlugVal(cat.slug)
+    setEditOrder(cat.sort_order ?? 100)
+    setEditVisible(cat.show_in_nav === 1)
   }
 
   const handleUpdate = async () => {
@@ -98,14 +104,14 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       const res = await fetch('/api/admin/categories', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldSlug: editingSlug, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim() }),
+        body: JSON.stringify({ oldSlug: editingSlug, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim(), sort_order: editOrder, show_in_nav: editVisible ? 1 : 0 }),
       })
       if (!res.ok) {
         const data = (await res.json()) as { error?: string }
         throw new Error(data.error || '更新失败')
       }
       setCategories((prev) =>
-        prev.map((c) => c.slug === editingSlug ? { ...c, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim() } : c)
+        prev.map((c) => c.slug === editingSlug ? { ...c, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim(), sort_order: editOrder, show_in_nav: editVisible ? 1 : 0 } : c)
       )
       setEditingSlug(null)
       toast.success('分类已更新')
@@ -210,6 +216,8 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
                       onChange={(e) => setEditNameEn(e.target.value)}
                       className="w-full text-sm rounded border border-[var(--editor-line)] bg-[var(--background)] px-2 py-1 text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)]"
                     />
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={editVisible} onChange={e => setEditVisible(e.target.checked)} />显示在导航</label>
+                    <label className="flex items-center gap-2 text-xs">排序<input type="number" min="0" max="10000" value={editOrder} onChange={e => setEditOrder(Number(e.target.value))} className="w-20 border rounded px-2 py-1" /></label>
                   </div>
                   <input
                     type="text"

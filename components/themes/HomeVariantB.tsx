@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SearchEntry } from '@/components/SearchEntry'
 import { Pagination } from '@/components/Pagination'
+import { ColumnLinks } from '@/components/ColumnLinks'
 import type { HomeProps } from '@/components/HomeClient'
 import { LanguageSwitcher, usePublicLocale } from '@/components/PublicLocale'
 import { formatPublicDate } from '@/lib/public-i18n'
@@ -48,6 +49,8 @@ function EditorialNavBar({
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 16,
     }}>
       <div style={{
         fontSize: 11,
@@ -58,8 +61,9 @@ function EditorialNavBar({
       }}>
         VOL. {vol} · {language === 'en' ? `${year}/${String(month).padStart(2, '0')}` : `${year}年${month}月`}
       </div>
-      <nav className="editorial-nav-links" style={{ display: 'flex', gap: 20, alignItems: 'center', fontSize: 12, letterSpacing: '0.08em', fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+      <nav className="editorial-nav-links" style={{ display: 'flex', flexWrap: 'wrap', maxWidth: '100%', gap: 20, alignItems: 'center', fontSize: 12, letterSpacing: '0.08em', fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
         <Link href={path('/')} style={{ color: FG, textDecoration: 'none' }}>{t('首页')}</Link>
+        <ColumnLinks />
         {links.map(link => (
           link.url.startsWith('http') ? (
             <a

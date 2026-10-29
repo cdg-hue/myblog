@@ -16,6 +16,7 @@ import {
 import type { NextRequest } from 'next/server'
 import { isLanguage, normalizeLanguage } from '@/lib/i18n'
 import { isTranslationConflict } from '@/lib/repositories/translations'
+import { TaxonomyError } from '@/lib/repositories/tags'
 
 export async function POST(req: NextRequest) {
   try {
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
       language: normalizeLanguage(payload.language),
     })
   } catch (error) {
+    if (error instanceof TaxonomyError) return jsonError(error.message, error.status)
     if (isTranslationConflict(error)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (error instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(error.message)) {
       return jsonError('slug 已存在，请换一个', 409)
@@ -185,6 +187,7 @@ export async function PATCH(req: NextRequest) {
 
     return jsonOk({ success: true, slug: nextSlug || currentSlug })
   } catch (error) {
+    if (error instanceof TaxonomyError) return jsonError(error.message, error.status)
     if (isTranslationConflict(error)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (error instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(error.message)) {
       return jsonError('slug 已存在，请换一个', 409)

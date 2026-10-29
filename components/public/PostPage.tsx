@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
+import { getCategoryTags } from '@/lib/repositories/tags'
 import { FrontPostAdminBoundary } from '@/components/FrontPostAdminBoundary'
 import { PasswordPrompt } from '@/components/PasswordPrompt'
 import { TwitterEmbedsEnhancer } from '@/components/TwitterEmbedsEnhancer'
@@ -175,6 +176,7 @@ export default async function PublicPostPage({
     ? await getRelatedPosts(db, env, post, 3).catch(() => ({ strategy: 'fts' as const, source: 'rules' as const, results: [] }))
     : { strategy: 'fts' as const, source: 'rules' as const, results: [] }
   const contentContainerId = `post-content-${post.slug}`
+  const articleTags = activeCategorySlug && post.tags.length ? (await getCategoryTags(db, activeCategorySlug, language)).filter(tag => post.tags.includes(tag.name)) : []
 
   return withLocale(
     <div className="min-h-screen bg-[var(--background)] flex flex-col">
@@ -227,6 +229,7 @@ export default async function PublicPostPage({
           title={post.title}
           html={post.html}
           category={post.category}
+          tags={post.tags}
           coverImage={post.cover_image}
           password={post.password ? 'protected' : null}
           publishedAt={post.published_at}
@@ -268,6 +271,9 @@ export default async function PublicPostPage({
                 <span aria-hidden>·</span>
                 <span>{readingTimeLabel(readingMinutes, language)}</span>
               </div>
+              {articleTags.length > 0 && activeCategorySlug && <nav aria-label={t('标签')} className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm text-[var(--editor-muted)]">
+                {articleTags.map(tag => <Link key={tag.id} href={publicPath(`/category/${encodeURIComponent(activeCategorySlug)}?tag=${encodeURIComponent(tag.slug)}`, language)} className="hover:text-[var(--editor-accent)] hover:underline">{language === 'en' ? tag.name_en || tag.name : tag.name}</Link>)}
+              </nav>}
             </header>
 
             <div

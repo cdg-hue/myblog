@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getPublicCategories: vi.fn(), getPostsByCategory: vi.fn(), getPostsCountByCategory: vi.fn(),
   getSiteHeaderData: vi.fn(), getRelatedPosts: vi.fn(), searchPostsWithStrategy: vi.fn(),
   verifyPassword: vi.fn(),
+  getCategoryTags: vi.fn(),
   frontPostAdminBoundary: vi.fn(({ children }: { children: unknown; category: string | null; password?: string | null }) => children),
   permanentRedirect: vi.fn((path: string) => { throw new Error(`redirect:${path}`) }),
 }))
@@ -15,6 +16,7 @@ vi.mock('@/lib/cloudflare', () => ({ getAppCloudflareEnv: mocks.getAppCloudflare
 vi.mock('@/lib/db', async importOriginal => ({ ...await importOriginal<object>(), ...mocks }))
 vi.mock('@/lib/site', () => ({ getSiteHeaderData: mocks.getSiteHeaderData }))
 vi.mock('@/lib/password', () => ({ verifyPassword: mocks.verifyPassword }))
+vi.mock('@/lib/repositories/tags', () => ({ getCategoryTags: mocks.getCategoryTags }))
 vi.mock('@/lib/related-content', () => ({ getRelatedPosts: mocks.getRelatedPosts, searchPostsWithStrategy: mocks.searchPostsWithStrategy }))
 vi.mock('next/navigation', () => ({ permanentRedirect: mocks.permanentRedirect, notFound: () => { throw new Error('not-found') } }))
 vi.mock('@/components/FrontPostAdminBoundary', () => ({ FrontPostAdminBoundary: mocks.frontPostAdminBoundary }))
@@ -59,6 +61,7 @@ describe('bilingual public pages', () => {
     mocks.getPostsCountByCategory.mockResolvedValue(30)
     mocks.searchPostsWithStrategy.mockResolvedValue({ results: [translation] })
     mocks.verifyPassword.mockResolvedValue(true)
+    mocks.getCategoryTags.mockResolvedValue([])
   })
 
   it('passes the language into home queries before pagination and count', async () => {
@@ -78,6 +81,17 @@ describe('bilingual public pages', () => {
     expect(html).toContain('href="/en/hello-en"')
     expect(html).toContain('href="/en/category/tech"')
     expect(html).toContain('href="/category/tech" hrefLang="zh-CN"')
+  })
+
+  it('filters a column by tag before pagination and preserves the tag in language and page links', async () => {
+    mocks.getCategoryTags.mockResolvedValue([{ id: 4, slug: 'sim-cards', name: '手机卡', name_en: 'SIM Cards', post_count: 30 }])
+    const tree = await PublicCategoryPage({ params: params('tech'), searchParams: Promise.resolve({ page: '2', tag: 'sim-cards' }), language: 'en' })
+    const html = renderToStaticMarkup(tree)
+    expect(mocks.getPostsByCategory).toHaveBeenCalledWith({}, '技术', 25, 25, 'en', 'sim-cards')
+    expect(mocks.getPostsCountByCategory).toHaveBeenCalledWith({}, '技术', 'en', 'sim-cards')
+    expect(html).toContain('SIM Cards')
+    expect(html).toContain('/en/category/tech?tag=sim-cards&amp;page=2')
+    expect(html).toContain('href="/category/tech?tag=sim-cards" hrefLang="zh-CN"')
   })
 
   it('passes locale to strategy search and preserves the query when switching languages', async () => {

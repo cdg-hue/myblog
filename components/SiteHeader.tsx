@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
-import { Menu, X, ChevronDown } from 'lucide-react'
+import { useState, useSyncExternalStore } from 'react'
+import { Menu, X } from 'lucide-react'
 import { SearchEntry } from './SearchEntry'
 import { getClientThemePreference, normalizeTheme, SITE_THEME, subscribeToThemeChange, type Theme } from '@/lib/appearance'
 import type { SiteCategoryLink, SiteNavLink } from '@/lib/site'
 import { LanguageSwitcher, usePublicLocale } from '@/components/PublicLocale'
+import { ColumnLinks } from '@/components/ColumnLinks'
 
 export type NavLink = SiteNavLink
 
@@ -39,25 +40,12 @@ export function SiteHeader({
   const { language, t, path } = usePublicLocale()
   const links = navLinks && navLinks.length > 0 ? navLinks : defaultNavLinks
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [categoryOpen, setCategoryOpen] = useState(false)
-  const categoryRef = useRef<HTMLDivElement>(null)
   const theme = useSyncExternalStore(
     subscribeToThemeChange,
     () => getClientThemePreference(initialTheme),
     () => normalizeTheme(initialTheme),
   )
 
-  // 点击外部关闭分类下拉
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (categoryRef.current && !categoryRef.current.contains(e.target as Node)) {
-        setCategoryOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-  const activeCategory = categories.find(c => c.slug === activeCategorySlug)
 
   const renderLink = (link: NavLink, onClick?: () => void) => {
     const className = "text-[var(--editor-muted)] hover:text-[var(--editor-ink)] transition-colors duration-150"
@@ -138,65 +126,19 @@ export function SiteHeader({
   return (
     <header className={`site-header ${stickyOnMobile ? 'sticky' : 'sm:sticky'} top-0 z-40 border-b border-[var(--editor-line)] bg-[var(--background)]/95 backdrop-blur-sm`}>
       <div className="site-header-inner mx-auto max-w-3xl px-4 sm:px-6">
-        <div className="h-14 flex items-center justify-between gap-4">
+        <div className="min-h-16 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-3 lg:flex-nowrap lg:py-0">
           {renderLogo()}
 
           {/* Desktop nav */}
-          <nav className="hidden sm:flex items-center gap-3 text-sm flex-shrink-0">
-            {/* Category dropdown */}
-            {categories.length > 0 && (
-              <div ref={categoryRef} className="relative">
-                <button
-                  onClick={() => setCategoryOpen(!categoryOpen)}
-                  className={`inline-flex items-center gap-1 transition-colors duration-150 ${
-                    activeCategorySlug
-                      ? 'text-[var(--editor-accent)]'
-                      : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)]'
-                  }`}
-                >
-                  {activeCategory?.displayName || activeCategory?.name || t('分类')}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${categoryOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {categoryOpen && (
-                  <div className="absolute top-full left-0 mt-2 min-w-[140px] rounded-lg border border-[var(--editor-line)] bg-[var(--background)] shadow-lg py-1 z-50">
-                    <Link
-                      href={path('/')}
-                      onClick={() => setCategoryOpen(false)}
-                      className={`block px-3 py-2 text-sm transition-colors ${
-                        activeCategorySlug === null
-                          ? 'text-[var(--editor-accent)] bg-[var(--editor-accent)]/5 font-medium'
-                          : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-panel)]'
-                      }`}
-                    >
-                      {t('全部文章')}
-                    </Link>
-                    {categories.map(cat => (
-                      <Link
-                        key={cat.slug}
-                        href={path(`/category/${cat.slug}`)}
-                        onClick={() => setCategoryOpen(false)}
-                        className={`block px-3 py-2 text-sm transition-colors ${
-                          activeCategorySlug === cat.slug
-                            ? 'text-[var(--editor-accent)] bg-[var(--editor-accent)]/5 font-medium'
-                            : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-panel)]'
-                        }`}
-                      >
-                        {cat.displayName || cat.name}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
+          <nav className="hidden lg:flex flex-wrap items-center justify-end gap-4 text-sm">
+            <ColumnLinks categories={categories} activeSlug={activeCategorySlug} />
             {links.map(link => renderLink(link))}
             <LanguageSwitcher />
             <SearchEntry />
           </nav>
 
           {/* Mobile: search icon + hamburger */}
-          <div className="sm:hidden flex items-center gap-1">
+          <div className="lg:hidden ml-auto flex items-center gap-2">
             <LanguageSwitcher />
             <SearchEntry />
             <button
@@ -208,12 +150,13 @@ export function SiteHeader({
             </button>
           </div>
         </div>
+        <div className="lg:hidden"><ColumnLinks categories={categories} activeSlug={activeCategorySlug} /></div>
       </div>
 
       {/* Mobile dropdown menu */}
       <div
         className={`
-          sm:hidden transition-all duration-300 ease-in-out
+          lg:hidden transition-all duration-300 ease-in-out
           ${mobileMenuOpen ? 'max-h-[70vh] overflow-visible border-t border-[var(--editor-line)]' : 'max-h-0 overflow-hidden'}
         `}
       >

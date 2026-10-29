@@ -36,6 +36,7 @@ import {
 import { generatePassword } from '@/lib/password'
 import { InputModal } from '@/components/InputModal'
 import { CategorySelector } from '@/components/CategorySelector'
+import { CategoryTagChoices } from '@/components/CategoryTagChoices'
 import { ImageGenerationModal } from '@/components/ImageGenerationModal'
 import { ImageCropModal } from '@/components/ImageCropModal'
 import { WeChatPublishModal } from '@/components/WeChatPublishModal'
@@ -152,6 +153,7 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
     initialData?.is_hidden ? 'unlisted' : 'public'
   )
   const [tags, setTags] = useState<string[]>(initialData?.tags || [])
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([])
   const [description, setDescription] = useState(initialData?.description || '')
   const [coverImage, setCoverImage] = useState(initialData?.cover_image || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
@@ -860,9 +862,7 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
             throw new Error('标签生成结果为空')
           }
 
-          setTagInput('')
-          setTags(nextTags)
-          markDirty({ tags: nextTags })
+          setSuggestedTags(nextTags)
           return
         }
 
@@ -1094,6 +1094,14 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
     setTags(nextTags)
     markDirty({ tags: nextTags })
   }
+  const changeCategory = (next: string) => {
+    if (next === category) return
+    if (tags.length && !window.confirm('切换栏目会清除当前文章的标签，是否继续？')) return
+    setCategory(next)
+    setTags([])
+    setSuggestedTags([])
+    markDirty({ category: next, tags: [] })
+  }
 
   // ── Auto resize title ──
   const autoResizeTitle = (el: HTMLTextAreaElement) => {
@@ -1257,7 +1265,7 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
             <div className="mx-0.5 h-5 w-px bg-[var(--editor-line)]" />
 
             {/* Category selector */}
-            <div className="hidden md:block"><CategorySelector value={category} onChange={(val) => { setCategory(val); markDirty({ category: val }) }} /></div>
+            <div className="hidden md:block"><CategorySelector value={category} onChange={changeCategory} /></div>
 
             {/* Publish button + dropdown */}
             <div className="relative" ref={publishPanelRef}>
@@ -1518,7 +1526,7 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
               <fieldset disabled={editorLocked} className="min-w-0 space-y-6">
               <div className="space-y-2 md:hidden">
                 <label className="block text-xs font-semibold text-[var(--stone-gray)]">分类</label>
-                <CategorySelector value={category} onChange={(value) => { setCategory(value); markDirty({ category: value }) }} />
+                <CategorySelector value={category} onChange={changeCategory} />
               </div>
 
               {/* Tags */}
@@ -1536,6 +1544,8 @@ export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEdit
                     {isMetadataTargetPending('tags') ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WandSparkles className="h-3.5 w-3.5" />}
                   </button>
                 </div>
+                <CategoryTagChoices category={category} value={tags} onChange={next => { setTags(next); markDirty({ tags: next }) }} />
+                {suggestedTags.length > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 text-xs"><span>AI 候选：</span>{suggestedTags.map(tag => <button key={tag} type="button" onClick={() => addTag(tag)} className="underline">{tag} +</button>)}</div>}
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {tags.map((tag, idx) => (
                     <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-[var(--editor-accent)]/8 px-2 py-0.5 text-xs text-[var(--editor-accent)]">

@@ -2,6 +2,7 @@ import { getCacheKey } from '@/lib/cache'
 import { normalizeLanguage, type Language } from '@/lib/i18n'
 import { mapPostWithTags, parsePostTags } from '@/lib/repositories/post-mappers'
 import { ensureSchema, type Database } from '@/lib/repositories/schema'
+import { normalizeArticleTags, TaxonomyError } from './tags'
 import type {
   CountRow,
   Post,
@@ -146,6 +147,7 @@ export async function createPost(
 ): Promise<number> {
   await ensureSchema(db)
   const category = data.category || '未分类'
+  const tags = await normalizeArticleTags(db, category, data.tags ?? [])
 
   const result = await db
     .prepare(
@@ -159,7 +161,7 @@ export async function createPost(
       data.html,
       data.description || null,
       category,
-      data.tags ? JSON.stringify(data.tags) : null,
+      JSON.stringify(tags),
       data.status || 'published',
       data.password ?? null,
       data.is_hidden ?? 0,
@@ -239,10 +241,19 @@ export async function updatePost(
   let oldCategory: string | null = null
   if (data.category !== undefined) {
     const post = await db
-      .prepare('SELECT category, deleted_at FROM posts WHERE id = ?')
+      .prepare('SELECT category, deleted_at, tags FROM posts WHERE id = ?')
       .bind(id)
-      .first<PostCategoryRow>()
+      .first<PostCategoryRow & { tags: string | null }>()
     oldCategory = post?.category || null
+    if (oldCategory !== data.category && data.tags === undefined && parsePostTags(post?.tags ?? null).length) {
+      throw new TaxonomyError('切换栏目时请确认并重新选择标签', 409)
+    }
+  }
+
+  if (data.tags !== undefined || data.category !== undefined) {
+    const current = data.category ?? (await db.prepare('SELECT category FROM posts WHERE id = ?').bind(id).first<PostCategoryRow>())?.category ?? '未分类'
+    const tags = await normalizeArticleTags(db, current, data.tags ?? [])
+    if (data.tags !== undefined) data = { ...data, tags }
   }
 
   const updates: string[] = []
@@ -397,7 +408,7 @@ export async function getPostsCount(
 }
 
 // 根据分类获取文章数
-export async function getPostsCountByCategory(db: Database, category: string, language?: Language): Promise<number> {
+export async function getPostsCountByCategory(db: Database, category: string, language?: Language, tagSlug?: string): Promise<number> {
   const result = await db
     .prepare(
       `SELECT COUNT(*) as count
@@ -407,9 +418,10 @@ export async function getPostsCountByCategory(db: Database, category: string, la
          AND password IS NULL
          AND is_hidden = 0
          AND deleted_at IS NULL
-         ${language ? 'AND language = ?' : ''}`,
+         ${language ? 'AND language = ?' : ''}
+         ${tagSlug ? 'AND EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = posts.id AND t.slug = ?)' : ''}`,
     )
-    .bind(category, ...(language ? [language] : []))
+    .bind(category, ...(language ? [language] : []), ...(tagSlug ? [tagSlug] : []))
     .first<CountRow>()
   return (result?.count as number) ?? 0
 }
@@ -421,6 +433,7 @@ export async function getPostsByCategory(
   limit = 50,
   offset = 0,
   language?: Language,
+  tagSlug?: string,
 ): Promise<PostWithTags[]> {
   const { results } = await db
     .prepare(
@@ -432,10 +445,11 @@ export async function getPostsByCategory(
          AND is_hidden = 0
          AND deleted_at IS NULL
          ${language ? 'AND language = ?' : ''}
+         ${tagSlug ? 'AND EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = posts.id AND t.slug = ?)' : ''}
        ORDER BY is_pinned DESC, published_at DESC
        LIMIT ? OFFSET ?`,
     )
-    .bind(category, ...(language ? [language] : []), limit, offset)
+    .bind(category, ...(language ? [language] : []), ...(tagSlug ? [tagSlug] : []), limit, offset)
     .all<Post>()
 
   return results.map(mapPostWithTags)

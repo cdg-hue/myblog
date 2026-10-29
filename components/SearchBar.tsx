@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search } from 'lucide-react'
+import { LoaderCircle, Search, X } from 'lucide-react'
 import { usePublicLocale } from '@/components/PublicLocale'
+import { SearchTrigger } from '@/components/SearchTrigger'
 
 interface SearchResult {
   slug: string
@@ -120,14 +121,7 @@ export function SearchBar() {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="p-2 text-[var(--editor-muted)] hover:text-[var(--editor-ink)] transition-colors"
-        title={`${t('搜索')} (⌘K)`}
-        aria-label={t('搜索')}
-      >
-        <Search className="w-[18px] h-[18px]" />
-      </button>
+      <SearchTrigger onClick={() => setIsOpen(true)} />
 
       {isOpen && createPortal(
         <div
@@ -138,13 +132,13 @@ export function SearchBar() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={() => setIsOpen(false)} />
 
           {/* 搜索面板 */}
-          <div className="relative mx-auto mt-[12vh] sm:mt-[18vh] w-[92vw] max-w-[560px]">
-            <div className="bg-white rounded-2xl shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] border border-black/[0.06] overflow-hidden">
+          <div role="dialog" aria-modal="true" aria-label={t('搜索文章')} className="relative mx-auto mt-[12vh] sm:mt-[18vh] w-[92vw] max-w-[640px]">
+            <div className="bg-[var(--background)] rounded-lg shadow-[0_25px_60px_-12px_rgba(0,0,0,0.25)] border border-[var(--editor-line)] overflow-hidden">
 
               {/* 输入区 */}
               <form onSubmit={handleSubmit} onKeyDown={handleKeyNav}>
                 <div className="flex items-center gap-3 px-5 py-4">
-                  <Search className="w-5 h-5 text-[var(--editor-accent)] flex-shrink-0" />
+                  <Search className="w-6 h-6 text-[var(--editor-ink)] flex-shrink-0" />
                   <input
                     ref={inputRef}
                     type="text"
@@ -152,19 +146,12 @@ export function SearchBar() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={t('搜索文章...')}
                     aria-label={t('搜索')}
-                    className="flex-1 text-base bg-transparent outline-none placeholder:text-[var(--stone-gray)]/60 text-[var(--editor-ink)]"
+                    className="min-w-0 flex-1 py-1 text-lg bg-transparent outline-none placeholder:text-[var(--editor-muted)] text-[var(--editor-ink)]"
                     autoComplete="off"
                     spellCheck={false}
                   />
-                  {loading ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin text-[var(--editor-accent)] flex-shrink-0">
-                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                    </svg>
-                  ) : (
-                    <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-[var(--stone-gray)] bg-[var(--editor-soft)] border border-[var(--editor-line)] rounded font-mono">
-                      ESC
-                    </kbd>
-                  )}
+                  {loading && <LoaderCircle aria-hidden="true" className="h-5 w-5 animate-spin text-[var(--editor-accent)] shrink-0" />}
+                  <button type="button" onClick={() => setIsOpen(false)} aria-label={t('关闭')} title={t('关闭')} className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-ink)]"><X className="h-5 w-5" /></button>
                 </div>
               </form>
 
@@ -189,7 +176,7 @@ export function SearchBar() {
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
                       <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-sm font-medium text-[var(--editor-ink)] flex-1 line-clamp-1">
+                        <h3 className="text-base font-semibold text-[var(--editor-ink)] flex-1 line-clamp-1">
                           {result.title}
                         </h3>
                         <span className="text-[11px] text-[var(--stone-gray)] tabular-nums flex-shrink-0">
@@ -197,7 +184,7 @@ export function SearchBar() {
                         </span>
                       </div>
                       {result.description && (
-                        <p className="text-xs text-[var(--editor-muted)] line-clamp-1 leading-relaxed">
+                        <p className="text-sm text-[var(--editor-muted)] line-clamp-2 leading-relaxed">
                           {result.description}
                         </p>
                       )}

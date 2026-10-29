@@ -10,10 +10,10 @@ export const metadata = { title: '文章管理' }
 export default async function AdminPostsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; category?: string; language?: string }>
+  searchParams: Promise<{ q?: string; status?: string; category?: string; language?: string; tag?: string }>
 }) {
   const params = await searchParams
-  const { q, status, category } = params
+  const { q, status, category, tag } = params
   const language = params.language === 'en' || params.language === 'zh-CN' ? params.language : 'all'
 
   const env = await getAppCloudflareEnv()
@@ -52,6 +52,8 @@ export default async function AdminPostsPage({
   if (category && category !== 'all') {
     filteredPosts = filteredPosts.filter((p) => p.category === category)
   }
+  const availableTags = Array.from(new Set(filteredPosts.flatMap(p => p.tags))).sort((a, b) => a.localeCompare(b))
+  if (tag && tag !== 'all') filteredPosts = filteredPosts.filter(p => p.tags.includes(tag))
 
   const stats = {
     all: filteredPosts.length,
@@ -86,6 +88,8 @@ export default async function AdminPostsPage({
         currentStatus={status}
         currentCategory={category}
         currentLanguage={language}
+        currentTag={tag}
+        tags={availableTags}
         categories={postCategories}
         initialQuery={q}
         counts={stats}

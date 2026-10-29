@@ -15,6 +15,7 @@ export function InlineArticleEditorClient(props: {
   title: string
   html: string
   category?: string | null
+  tags?: string[]
   coverImage?: string | null
   password?: string | null
   publishedAt?: number

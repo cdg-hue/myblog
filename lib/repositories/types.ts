@@ -36,10 +36,13 @@ export interface StatsRow {
 }
 
 export interface CategoryRow {
+  id?: number
   name: string
   slug: string
   post_count: number
   name_en?: string | null
+  sort_order?: number
+  show_in_nav?: number
 }
 
 export interface SettingRow {

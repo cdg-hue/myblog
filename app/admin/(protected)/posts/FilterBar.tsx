@@ -8,6 +8,8 @@ interface FilterBarProps {
   currentStatus?: string
   currentCategory?: string
   currentLanguage?: string
+  currentTag?: string
+  tags?: string[]
   categories: string[]
   initialQuery?: string
   counts: {
@@ -26,6 +28,8 @@ export function FilterBar({
   currentStatus,
   currentCategory,
   currentLanguage,
+  currentTag,
+  tags = [],
   categories,
   initialQuery = '',
   counts,
@@ -41,6 +45,7 @@ export function FilterBar({
 
   const updateFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
+    if (key === 'category') params.delete('tag')
     if (value === 'all') {
       params.delete(key)
     } else {
@@ -74,7 +79,8 @@ export function FilterBar({
   const activeStatus = currentStatus || 'all'
   const activeCategory = currentCategory || 'all'
   const activeLanguage = currentLanguage || 'all'
-  const hasActiveFilters = Boolean(query.trim() || activeStatus !== 'all' || activeCategory !== 'all' || activeLanguage !== 'all')
+  const activeTag = currentTag || 'all'
+  const hasActiveFilters = Boolean(query.trim() || activeStatus !== 'all' || activeCategory !== 'all' || activeLanguage !== 'all' || activeTag !== 'all')
 
   const categoryOptions = [
     { value: 'all', label: '全部分类' },
@@ -157,6 +163,13 @@ export function FilterBar({
                 className="w-full"
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-[var(--editor-muted)]">
+              标签
+              <select aria-label="筛选文章标签" value={activeTag} onChange={e => updateFilter('tag', e.target.value)} className="rounded-lg border border-[var(--editor-line)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--editor-ink)]">
+                <option value="all">全部标签</option>
+                {tags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+              </select>
+            </label>
 
             {hasActiveFilters ? (
               <button

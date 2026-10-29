@@ -8,6 +8,7 @@ import { NavLinksEditor } from './NavLinksEditor'
 import { CustomJsEditor } from './CustomJsEditor'
 import { ThemeManager } from './ThemeManager'
 import { CategoryManager } from '../categories/CategoryManager'
+import { TagManager } from './TagManager'
 import { AiProviderManager } from './AiProviderManager'
 import { AiActionsManager } from './AiActionsManager'
 import { AiImageProviderManager } from './AiImageProviderManager'
@@ -104,8 +105,13 @@ export function SettingsManager({
     },
     {
       id: 'categories',
-      label: '分类设置',
+      label: '栏目设置',
       content: <CategoryManager initialCategories={initialCategories} />,
+    },
+    {
+      id: 'tags',
+      label: '标签管理',
+      content: <TagManager categories={initialCategories} />,
     },
     {
       id: 'code',

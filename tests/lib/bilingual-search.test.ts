@@ -8,6 +8,7 @@ describe('bilingual search and related posts', () => {
   let currentId: number
   beforeEach(async () => {
     testDb = createTestDatabase()
+    testDb.sqlite.exec("INSERT INTO categories (name, slug) VALUES ('技术', 'tech')")
     for (const [slug, language] of [['chinese', 'zh-CN'], ['english', 'en'], ['english-related', 'en']] as const) {
       const id = await createPost(testDb.db, { slug, language, title: 'Hello SQLite', content: 'SQLite database tutorial', html: '<p>SQLite</p>', category: '技术', tags: ['SQLite'] })
       if (slug === 'english') currentId = id

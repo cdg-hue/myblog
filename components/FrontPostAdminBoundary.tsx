@@ -9,6 +9,7 @@ interface FrontPostAdminBoundaryProps {
   title: string
   html: string
   category?: string | null
+  tags?: string[]
   coverImage?: string | null
   password?: string | null
   publishedAt?: number
@@ -22,6 +23,7 @@ export function FrontPostAdminBoundary({
   title,
   html,
   category,
+  tags,
   coverImage,
   password,
   publishedAt,
@@ -56,6 +58,7 @@ export function FrontPostAdminBoundary({
           title={title}
           html={html}
           category={category}
+          tags={tags}
           coverImage={coverImage}
           password={password}
           publishedAt={publishedAt}
