@@ -1,4 +1,5 @@
 import type { Post, PostWithTags } from '@/lib/repositories/types'
+import { normalizeLanguage } from '@/lib/i18n'
 
 export function parsePostTags(value: string | null): string[] {
   return value ? JSON.parse(value) : []
@@ -13,5 +14,7 @@ export function mapPostWithTags(post: Post): PostWithTags {
     ...post,
     status: normalizePostStatus(post),
     tags: parsePostTags(post.tags),
+    language: normalizeLanguage(post.language),
+    translation_group_id: post.translation_group_id ?? null,
   }
 }

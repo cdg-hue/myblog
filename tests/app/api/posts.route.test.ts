@@ -127,4 +127,31 @@ describe('/api/posts route', () => {
     )
     expect(body).toEqual({ success: true, slug: 'new_slug' })
   })
+
+  it('creates an English article with its language and rejects unsupported languages', async () => {
+    mocks.parseJsonBody.mockResolvedValue({ title: 'Hello', content: 'English body', language: 'en' })
+    mocks.createPost.mockResolvedValue(43)
+    expect((await POST({} as never)).status).toBe(200)
+    expect(mocks.createPost).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ language: 'en' }))
+    mocks.createPost.mockClear()
+    mocks.parseJsonBody.mockResolvedValue({ title: 'Hello', content: 'Body', language: 'fr' })
+    expect((await POST({} as never)).status).toBe(400)
+    expect(mocks.createPost).not.toHaveBeenCalled()
+  })
+
+  it('does not reset an existing article language for legacy PATCH requests', async () => {
+    mocks.parseJsonBody.mockResolvedValue({ current_slug: 'english', title: 'Updated' })
+    expect((await PATCH({} as never)).status).toBe(200)
+    expect(mocks.updatePostBySlug.mock.calls[0][2]).not.toHaveProperty('language')
+    mocks.parseJsonBody.mockResolvedValue({ current_slug: 'english', language: 'fr' })
+    expect((await PATCH({} as never)).status).toBe(400)
+  })
+
+  it('rejects the reserved language-prefix slug and reports translation conflicts', async () => {
+    mocks.parseJsonBody.mockResolvedValue({ title: 'Hello', content: 'Body', slug: 'en' })
+    expect((await POST({} as never)).status).toBe(400)
+    mocks.parseJsonBody.mockResolvedValue({ current_slug: 'original', language: 'en' })
+    mocks.updatePostBySlug.mockRejectedValue(new Error('UNIQUE constraint failed: posts.translation_group_id, posts.language'))
+    expect((await PATCH({} as never)).status).toBe(409)
+  })
 })

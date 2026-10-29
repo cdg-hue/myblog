@@ -16,6 +16,8 @@
 
 - 个人博客首页和文章详情页
 - 后台文章管理与在线编辑
+- 中英文独立文章、译文关联和读者语言切换
+- AI 分段翻译、候选预览和审核后应用到草稿
 - 分类、导航、站点设置
 - 图片上传与封面图管理
 - 全文搜索
@@ -24,6 +26,17 @@
 - Cloudflare D1 数据库
 - Cloudflare R2 图片存储
 - `www.blog-acheng.com` 自动跳转到 `blog-acheng.com`
+
+## 中英文发布
+
+1. 在编辑器的发布设置中选择“中文”或“English”，正常保存和发布文章。
+2. 展开右侧文章设置，点击“新建英文译文”或“新建中文译文”；也可以选择已有文章进行关联。
+3. 新建的译文默认是独立草稿，可以手写，也可以点击“AI 翻译”。AI 需要后台已配置可用的文本模型。
+4. 翻译完成后先预览，再主动应用到草稿；校对后单独发布。AI 不会自动公开文章或覆盖原文。
+
+中文首页为 `/`，英文首页为 `/en`。首页、分类、搜索和 RSS 按语言展示；文章页只有在对应译文已公开时才提供切换链接。
+
+中英文共用图片资源，正文分别保存。发布、修改或关联译文均不需要重新部署。修改中文原文不会自动改写已有英文稿。
 
 ## 技术栈
 
@@ -37,6 +50,8 @@
 - Novel / Tiptap
 
 ## 本地开发
+
+开发和测试使用 Node.js 22.13 或更新版本，数据库测试依赖内置的 `node:sqlite`。GitHub 自动检查使用 Node.js 22。
 
 ```bash
 npm install
@@ -65,6 +80,10 @@ npm run dev
 npx opennextjs-cloudflare build
 npx opennextjs-cloudflare deploy -c wrangler.local.toml
 ```
+
+已有数据库升级双语功能时，先记录 Cloudflare D1 Time Travel 恢复点或完成经授权的数据库备份，再按实际迁移记录应用 `db/migrations/005_add_post_languages.sql` 和 `006_repair_search_index.sql`。不要对已有数据库重跑完整 `db/schema.sql` 或重复执行已完成的增量迁移。
+
+`npm run deploy` 是原模板的初始化部署脚本，会重放完整 schema；已有站点使用上面的 OpenNext 构建和部署命令。详细设计与验收范围见 [双语方案](docs/bilingual-plan.md)。
 
 ## 常用命令
 

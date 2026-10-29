@@ -4,6 +4,7 @@ import { isAdminAuthenticated, COOKIE_NAME } from '@/lib/admin-auth'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { NovelEditorClient } from '@/components/NovelEditorClient'
+import { normalizeLanguage, type Language } from '@/lib/i18n'
 
 export default async function EditorPage({
   searchParams,
@@ -27,6 +28,7 @@ export default async function EditorPage({
   const isNew = params.new === '1'
 
   let initialData: {
+    id?: number
     slug: string
     title: string
     html: string
@@ -37,6 +39,9 @@ export default async function EditorPage({
     tags?: string[]
     description?: string | null
     cover_image?: string | null
+    language?: Language
+    translation_group_id?: string | null
+    updated_at?: number
   } | undefined
 
   if (edit) {
@@ -45,6 +50,7 @@ export default async function EditorPage({
       const post = await getPostBySlug(env.DB, edit)
       if (post) {
         initialData = {
+          id: post.id,
           slug: post.slug,
           title: post.title,
           html: post.html,
@@ -55,6 +61,9 @@ export default async function EditorPage({
           tags: post.tags,
           description: post.description,
           cover_image: post.cover_image,
+          language: normalizeLanguage(post.language),
+          translation_group_id: post.translation_group_id,
+          updated_at: post.updated_at,
         }
       }
     }

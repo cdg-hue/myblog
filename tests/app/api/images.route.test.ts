@@ -37,7 +37,7 @@ describe('/api/images/[...key] route', () => {
     global.fetch = originalFetch
   })
 
-  function createImageRequest(url: string, init?: RequestInit) {
+  function createImageRequest(url: string, init?: ConstructorParameters<typeof NextRequest>[1]) {
     return new NextRequest(url, init)
   }
 

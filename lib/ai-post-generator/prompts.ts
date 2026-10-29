@@ -8,6 +8,7 @@ import {
 } from '@/lib/ai-post-generator/constants'
 import { truncateText } from '@/lib/ai-post-generator/parsers'
 import type { AiPostGeneratorRow, GeneratePostCoverInput } from '@/lib/ai-post-generator/types'
+import type { Language } from '@/lib/i18n'
 
 type ContextTarget = 'summary' | 'tags' | 'slug' | 'cover'
 
@@ -53,7 +54,14 @@ export function buildContextBlock(input: {
 export function buildTextSystemPrompt(
   target: 'summary' | 'tags' | 'slug',
   prompt: string,
+  language: Language = 'zh-CN',
 ) {
+  if (language === 'en' && target !== 'slug') {
+    const output = target === 'summary'
+      ? 'Return JSON only: {"summary":"..."}. Write an accurate, natural English summary of at most 160 characters, grounded in the article. No generic introductions or quotation marks.'
+      : 'Return JSON only: {"tags":["tag1","tag2"]}. Extract 3-5 specific English topic tags from the article. Preserve proper names; avoid sentences, generic categories and duplicates.'
+    return `${prompt}\n\nThe article language is English. Write the result in English; this takes precedence over default Chinese-language instructions above.\n${output}`
+  }
   if (target === 'summary') {
     return `${prompt}\n\n请只返回 JSON：{"summary":"..."}。\n额外要求：摘要必须是简体中文，控制在 160 字以内；必须基于标题和正文中的具体内容，优先提炼文章最值得读的那个问题、反差、矛盾或洞见，再用自然导语把读者带进去；尽量保留具体主题词；避免“本文/这篇文章/作者认为”等空泛开头；不要使用引号。`
   }

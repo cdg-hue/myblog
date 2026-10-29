@@ -412,7 +412,7 @@ export async function generatePostMetadata(
   const generation = await runTextGenerator(runtime, [
     {
       role: 'system',
-      content: buildTextSystemPrompt(input.target, generator.prompt),
+      content: buildTextSystemPrompt(input.target, generator.prompt, input.language),
     },
     {
       role: 'user',

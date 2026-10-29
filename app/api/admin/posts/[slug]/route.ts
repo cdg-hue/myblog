@@ -5,6 +5,8 @@ import { buildAutoDescription, normalizePostSlug } from '@/lib/post-utils'
 import { enqueueBackgroundJob } from '@/lib/background-jobs'
 import { getRouteContextWithDb, jsonError, jsonOk, parseJsonBody } from '@/lib/server/route-helpers'
 import type { NextRequest } from 'next/server'
+import { isLanguage } from '@/lib/i18n'
+import { isTranslationConflict } from '@/lib/repositories/translations'
 
 async function checkAuth(req: NextRequest): Promise<boolean> {
   const token = req.cookies.get(COOKIE_NAME)?.value
@@ -57,6 +59,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       cover_image,
       tags,
       description,
+      language,
     } = await parseJsonBody<{
       slug?: string
       title?: string
@@ -70,8 +73,11 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       cover_image?: string | null
       tags?: string[]
       description?: string
+      language?: unknown
     }>(req)
     const nextSlug = typeof nextSlugRaw === 'string' ? normalizePostSlug(nextSlugRaw) : ''
+    if (language !== undefined && !isLanguage(language)) return jsonError('不支持的文章语言', 400)
+    if (nextSlug === 'en') return jsonError('en 是语言页面的保留地址，请更换 slug', 400)
     const normalizedDescription = typeof description === 'string' && description.trim()
       ? description.trim()
       : buildAutoDescription(typeof content === 'string' ? content : '')
@@ -89,6 +95,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
       cover_image,
       tags,
       description: normalizedDescription,
+      ...(isLanguage(language) ? { language } : {}),
     })
 
     // 清除 KV 缓存（失败不影响保存结果）
@@ -111,6 +118,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 
     return jsonOk({ success: true, slug: nextSlug || slug })
   } catch (err) {
+    if (isTranslationConflict(err)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (err instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(err.message)) {
       return jsonError('slug 已存在，请换一个', 409)
     }

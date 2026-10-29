@@ -1,12 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { usePublicLocale } from '@/components/PublicLocale'
 
 interface PasswordPromptProps {
   error?: string
 }
 
 export function PasswordPrompt({ error }: PasswordPromptProps) {
+  const { t } = usePublicLocale()
   const [password, setPassword] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -30,10 +32,10 @@ export function PasswordPrompt({ error }: PasswordPromptProps) {
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-[var(--editor-ink)] mb-2">
-              此文章已加密
+              {t('此文章已加密')}
             </h2>
             <p className="text-sm text-[var(--editor-muted)]">
-              请输入密码查看内容
+              {t('请输入密码查看内容')}
             </p>
           </div>
 
@@ -43,7 +45,8 @@ export function PasswordPrompt({ error }: PasswordPromptProps) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入密码"
+                placeholder={t('请输入密码')}
+                aria-label={t('请输入密码')}
                 autoFocus
                 className="w-full px-4 py-3 rounded-lg border border-[var(--editor-line)] bg-[var(--background)] text-[var(--editor-ink)] placeholder:text-[var(--editor-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--editor-accent)] focus:border-transparent transition"
               />
@@ -57,7 +60,7 @@ export function PasswordPrompt({ error }: PasswordPromptProps) {
               disabled={!password.trim()}
               className="w-full px-4 py-3 rounded-lg bg-[var(--editor-accent)] text-white font-medium hover:brightness-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              解锁文章
+              {t('解锁文章')}
             </button>
           </form>
         </div>

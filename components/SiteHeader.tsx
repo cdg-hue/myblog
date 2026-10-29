@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { Menu, X, ChevronDown } from 'lucide-react'
 import { SearchEntry } from './SearchEntry'
-import { ThemeDropdown } from '@/components/ThemeDropdown'
-import { getClientThemePreference, subscribeToThemeChange, type Theme } from '@/lib/appearance'
+import { getClientThemePreference, normalizeTheme, SITE_THEME, subscribeToThemeChange, type Theme } from '@/lib/appearance'
 import type { SiteCategoryLink, SiteNavLink } from '@/lib/site'
+import { LanguageSwitcher, usePublicLocale } from '@/components/PublicLocale'
 
 export type NavLink = SiteNavLink
 
@@ -34,8 +34,9 @@ export function SiteHeader({
   categories = [],
   activeCategorySlug = null,
   stickyOnMobile = true,
-  initialTheme = 'default',
+  initialTheme = SITE_THEME,
 }: SiteHeaderProps) {
+  const { language, t, path } = usePublicLocale()
   const links = navLinks && navLinks.length > 0 ? navLinks : defaultNavLinks
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
@@ -43,7 +44,7 @@ export function SiteHeader({
   const theme = useSyncExternalStore(
     subscribeToThemeChange,
     () => getClientThemePreference(initialTheme),
-    () => initialTheme,
+    () => normalizeTheme(initialTheme),
   )
 
   // 点击外部关闭分类下拉
@@ -65,7 +66,7 @@ export function SiteHeader({
       return (
         <a
           key={link.label}
-          href={link.url}
+          href={path(link.url)}
           target={link.openInNewTab ? '_blank' : undefined}
           rel={link.openInNewTab ? 'noopener noreferrer' : undefined}
           className={className}
@@ -79,7 +80,7 @@ export function SiteHeader({
     return (
       <Link
         key={link.label}
-        href={link.url}
+        href={path(link.url)}
         className={className}
         onClick={onClick}
       >
@@ -93,7 +94,7 @@ export function SiteHeader({
     if (theme === 'terminal') {
       return (
         <Link
-          href="/"
+          href={path('/')}
           className="flex items-center gap-2 flex-shrink-0 text-[var(--editor-muted)] hover:text-[var(--editor-ink)] transition-colors duration-200"
           style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 13 }}
           suppressHydrationWarning
@@ -110,14 +111,14 @@ export function SiteHeader({
       return (
         <div className="flex items-baseline gap-4 flex-shrink-0" suppressHydrationWarning>
           <Link
-            href="/"
+            href={path('/')}
             className="text-lg tracking-tight text-[var(--editor-ink)] hover:text-[var(--editor-accent)] transition-colors duration-200 font-bold"
             style={{ fontFamily: 'var(--logo-font, "Noto Serif SC", Georgia, serif)' }}
           >
-            阿成
+            {t('阿成')}
           </Link>
           <span style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 11, letterSpacing: '0.15em', color: 'var(--editor-muted)' }}>
-            VOL.{vol} · {year}年{month}月
+            VOL.{vol} · {language === 'en' ? `${year}/${String(month).padStart(2, '0')}` : `${year}年${month}月`}
           </span>
         </div>
       )
@@ -125,11 +126,11 @@ export function SiteHeader({
 
     return (
       <Link
-        href="/"
+        href={path('/')}
         className="text-lg tracking-tight text-[var(--editor-ink)] hover:text-[var(--editor-accent)] transition-colors duration-200 flex-shrink-0 font-bold"
         style={{ fontFamily: 'var(--logo-font, Georgia, "Noto Serif SC", serif)' }}
       >
-        阿成
+        {t('阿成')}
       </Link>
     )
   }
@@ -153,14 +154,14 @@ export function SiteHeader({
                       : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)]'
                   }`}
                 >
-                  {activeCategory?.name || '分类'}
+                  {activeCategory?.displayName || activeCategory?.name || t('分类')}
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${categoryOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {categoryOpen && (
                   <div className="absolute top-full left-0 mt-2 min-w-[140px] rounded-lg border border-[var(--editor-line)] bg-[var(--background)] shadow-lg py-1 z-50">
                     <Link
-                      href="/"
+                      href={path('/')}
                       onClick={() => setCategoryOpen(false)}
                       className={`block px-3 py-2 text-sm transition-colors ${
                         activeCategorySlug === null
@@ -168,12 +169,12 @@ export function SiteHeader({
                           : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-panel)]'
                       }`}
                     >
-                      全部文章
+                      {t('全部文章')}
                     </Link>
                     {categories.map(cat => (
                       <Link
                         key={cat.slug}
-                        href={`/category/${cat.slug}`}
+                        href={path(`/category/${cat.slug}`)}
                         onClick={() => setCategoryOpen(false)}
                         className={`block px-3 py-2 text-sm transition-colors ${
                           activeCategorySlug === cat.slug
@@ -181,7 +182,7 @@ export function SiteHeader({
                             : 'text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-panel)]'
                         }`}
                       >
-                        {cat.name}
+                        {cat.displayName || cat.name}
                       </Link>
                     ))}
                   </div>
@@ -190,17 +191,18 @@ export function SiteHeader({
             )}
 
             {links.map(link => renderLink(link))}
-            <ThemeDropdown initialTheme={initialTheme} />
+            <LanguageSwitcher />
             <SearchEntry />
           </nav>
 
           {/* Mobile: search icon + hamburger */}
           <div className="sm:hidden flex items-center gap-1">
+            <LanguageSwitcher />
             <SearchEntry />
             <button
               className="p-2 text-[var(--editor-muted)] hover:text-[var(--editor-ink)] transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label={mobileMenuOpen ? '关闭菜单' : '打开菜单'}
+              aria-label={t(mobileMenuOpen ? '关闭菜单' : '打开菜单')}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -221,7 +223,7 @@ export function SiteHeader({
             <div className="px-4 py-3 border-b border-[var(--editor-line)]">
               <div className="flex flex-wrap gap-2">
                 <Link
-                  href="/"
+                  href={path('/')}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                     activeCategorySlug === null
@@ -229,12 +231,12 @@ export function SiteHeader({
                       : 'bg-[var(--editor-panel)] text-[var(--editor-muted)]'
                   }`}
                 >
-                  全部
+                  {t('全部')}
                 </Link>
                 {categories.map((category) => (
                   <Link
                     key={category.slug}
-                    href={`/category/${category.slug}`}
+                    href={path(`/category/${category.slug}`)}
                     onClick={() => setMobileMenuOpen(false)}
                     className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                       activeCategorySlug === category.slug
@@ -242,7 +244,7 @@ export function SiteHeader({
                         : 'bg-[var(--editor-panel)] text-[var(--editor-muted)]'
                     }`}
                   >
-                    {category.name}
+                    {category.displayName || category.name}
                   </Link>
                 ))}
               </div>
@@ -255,27 +257,6 @@ export function SiteHeader({
                 {renderLink(link, () => setMobileMenuOpen(false))}
               </div>
             ))}
-            <div className="px-4 py-3 border-t border-[var(--editor-line)] text-[var(--editor-muted)]">
-              <ThemeDropdown
-                initialTheme={initialTheme}
-                inlineMenu
-                fullWidth
-                onThemeChange={() => setMobileMenuOpen(false)}
-                buttonStyle={{
-                  width: '100%',
-                  justifyContent: 'space-between',
-                  color: 'var(--editor-muted)',
-                  fontSize: 14,
-                }}
-                dropdownStyle={{
-                  background: 'var(--editor-panel)',
-                }}
-                itemStyle={{
-                  padding: '10px 12px',
-                  fontSize: 13,
-                }}
-              />
-            </div>
           </nav>
         </div>
       </div>

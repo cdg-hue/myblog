@@ -3,16 +3,18 @@ import { getAppCloudflareEnv } from '@/lib/cloudflare'
 import Link from 'next/link'
 import { PostRow } from './PostRow'
 import { FilterBar } from './FilterBar'
+import { normalizeLanguage } from '@/lib/i18n'
 
 export const metadata = { title: '文章管理' }
 
 export default async function AdminPostsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; category?: string }>
+  searchParams: Promise<{ q?: string; status?: string; category?: string; language?: string }>
 }) {
   const params = await searchParams
   const { q, status, category } = params
+  const language = params.language === 'en' || params.language === 'zh-CN' ? params.language : 'all'
 
   const env = await getAppCloudflareEnv()
   let sourcePosts: Awaited<ReturnType<typeof getPosts>> = []
@@ -43,34 +45,39 @@ export default async function AdminPostsPage({
     new Set(sourcePosts.map((p) => p.category).filter(Boolean))
   ) as string[]
 
-  const stats = {
-    all: sourcePosts.length,
-    published: sourcePosts.filter((p) => p.status === 'published').length,
-    draft: sourcePosts.filter((p) => p.status === 'draft').length,
-    deleted: sourcePosts.filter((p) => p.status === 'deleted').length,
-    encrypted: sourcePosts.filter((p) => !!p.password).length,
-    unlisted: sourcePosts.filter((p) => p.is_hidden === 1).length,
-    pinned: sourcePosts.filter((p) => p.is_pinned === 1).length,
+  let filteredPosts = sourcePosts
+  if (language !== 'all') {
+    filteredPosts = filteredPosts.filter((p) => normalizeLanguage(p.language) === language)
+  }
+  if (category && category !== 'all') {
+    filteredPosts = filteredPosts.filter((p) => p.category === category)
   }
 
-  let posts = sourcePosts
+  const stats = {
+    all: filteredPosts.length,
+    published: filteredPosts.filter((p) => p.status === 'published').length,
+    draft: filteredPosts.filter((p) => p.status === 'draft').length,
+    deleted: filteredPosts.filter((p) => p.status === 'deleted').length,
+    encrypted: filteredPosts.filter((p) => p.status !== 'deleted' && !!p.password).length,
+    unlisted: filteredPosts.filter((p) => p.status !== 'deleted' && p.is_hidden === 1).length,
+    pinned: filteredPosts.filter((p) => p.status !== 'deleted' && p.is_pinned === 1).length,
+  }
+
+  let posts = filteredPosts
   if (status && status !== 'all') {
     switch (status) {
       case 'encrypted':
-        posts = posts.filter((p) => !!p.password)
+        posts = posts.filter((p) => p.status !== 'deleted' && !!p.password)
         break
       case 'unlisted':
-        posts = posts.filter((p) => p.is_hidden === 1)
+        posts = posts.filter((p) => p.status !== 'deleted' && p.is_hidden === 1)
         break
       case 'pinned':
-        posts = posts.filter((p) => p.is_pinned === 1)
+        posts = posts.filter((p) => p.status !== 'deleted' && p.is_pinned === 1)
         break
       default:
         posts = posts.filter((p) => p.status === status)
     }
-  }
-  if (category && category !== 'all') {
-    posts = posts.filter((p) => p.category === category)
   }
 
   return (
@@ -78,6 +85,7 @@ export default async function AdminPostsPage({
       <FilterBar
         currentStatus={status}
         currentCategory={category}
+        currentLanguage={language}
         categories={postCategories}
         initialQuery={q}
         counts={stats}

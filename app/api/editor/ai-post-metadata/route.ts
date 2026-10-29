@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/admin-auth'
+import { isLanguage, normalizeLanguage } from '@/lib/i18n'
 import { getAppCloudflareEnv } from '@/lib/cloudflare'
 import {
   ensureAiPostGeneratorInfrastructure,
@@ -30,6 +31,7 @@ interface RequestBody {
   description?: string
   tags?: string[]
   currentSlug?: string
+  language?: unknown
 }
 
 function isValidTarget(value: unknown): value is AiPostGeneratorTarget {
@@ -59,6 +61,9 @@ export async function POST(req: NextRequest) {
 
   if (!isValidTarget(body.target)) {
     return NextResponse.json({ error: '缺少有效的 target 参数' }, { status: 400 })
+  }
+  if (body.language !== undefined && !isLanguage(body.language)) {
+    return NextResponse.json({ error: '不支持的文章语言' }, { status: 400 })
   }
 
   const title = (body.title || '').trim()
@@ -104,6 +109,7 @@ export async function POST(req: NextRequest) {
       description,
       tags,
       currentSlug,
+      language: normalizeLanguage(body.language),
       db,
       env,
     })

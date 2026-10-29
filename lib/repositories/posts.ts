@@ -1,4 +1,5 @@
 import { getCacheKey } from '@/lib/cache'
+import { normalizeLanguage, type Language } from '@/lib/i18n'
 import { mapPostWithTags, parsePostTags } from '@/lib/repositories/post-mappers'
 import { ensureSchema, type Database } from '@/lib/repositories/schema'
 import type {
@@ -19,6 +20,7 @@ export async function getPosts(
   includeEncrypted = false,
   includeHidden = false,
   includeDeleted = false,
+  language?: Language,
 ): Promise<PostWithTags[]> {
   await ensureSchema(db)
   const conditions: string[] = []
@@ -34,18 +36,19 @@ export async function getPosts(
   if (!includeHidden) {
     conditions.push('is_hidden = 0')
   }
+  if (language) conditions.push('language = ?')
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const { results } = await db
     .prepare(
       `SELECT id, slug, title, description, category, tags, status, password, is_pinned, is_hidden, published_at, view_count
-       , deleted_at
+       , deleted_at, language, translation_group_id
        FROM posts
        ${where}
        ORDER BY is_pinned DESC, published_at DESC
        LIMIT ? OFFSET ?`,
     )
-    .bind(limit, offset)
+    .bind(...(language ? [language] : []), limit, offset)
     .all<Post>()
 
   return results.map(mapPostWithTags)
@@ -89,6 +92,12 @@ export async function getPostBySlug(
   return result
 }
 
+export async function getPostById(db: Database, id: number): Promise<PostWithTags | null> {
+  await ensureSchema(db)
+  const post = await db.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first<Post>()
+  return post ? mapPostWithTags(post) : null
+}
+
 export async function getPostAiSnapshot(
   db: Database,
   id: number,
@@ -100,11 +109,12 @@ export async function getPostAiSnapshot(
   description: string | null
   tags: string[]
   deleted_at: number | null
+  language?: Language
 } | null> {
   await ensureSchema(db)
 
   const post = await db
-    .prepare('SELECT id, title, content, category, description, tags, deleted_at FROM posts WHERE id = ?')
+    .prepare('SELECT id, title, content, category, description, tags, deleted_at, language FROM posts WHERE id = ?')
     .bind(id)
     .first<PostAiSnapshotRow>()
 
@@ -131,6 +141,7 @@ export async function createPost(
     password?: string | null
     is_hidden?: number
     cover_image?: string | null
+    language?: Language
   },
 ): Promise<number> {
   await ensureSchema(db)
@@ -138,8 +149,8 @@ export async function createPost(
 
   const result = await db
     .prepare(
-      `INSERT INTO posts (slug, title, content, html, description, category, tags, status, password, is_hidden, cover_image)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO posts (slug, title, content, html, description, category, tags, status, password, is_hidden, cover_image, language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       data.slug,
@@ -153,6 +164,7 @@ export async function createPost(
       data.password ?? null,
       data.is_hidden ?? 0,
       data.cover_image ?? null,
+      normalizeLanguage(data.language),
     )
     .run()
 
@@ -185,6 +197,7 @@ export async function updatePostBySlug(
     is_pinned: number
     is_hidden: number
     cover_image: string | null
+    language: Language
   }>,
 ): Promise<void> {
   await ensureSchema(db)
@@ -218,6 +231,7 @@ export async function updatePost(
     is_pinned: number
     is_hidden: number
     cover_image: string | null
+    language: Language
   }>,
 ): Promise<void> {
   await ensureSchema(db)
@@ -287,6 +301,10 @@ export async function updatePost(
     updates.push('cover_image = ?')
     values.push(data.cover_image)
   }
+  if (data.language !== undefined) {
+    updates.push('language = ?')
+    values.push(data.language)
+  }
 
   if (updates.length === 0) return
 
@@ -355,6 +373,7 @@ export async function getPostsCount(
   includeEncrypted = false,
   includeHidden = false,
   includeDeleted = false,
+  language?: Language,
 ): Promise<number> {
   await ensureSchema(db)
   const conditions: string[] = []
@@ -370,14 +389,15 @@ export async function getPostsCount(
   if (!includeHidden) {
     conditions.push('is_hidden = 0')
   }
+  if (language) conditions.push('language = ?')
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
   const sql = `SELECT COUNT(*) as count FROM posts ${where}`
-  const result = await db.prepare(sql).first<CountRow>()
+  const result = await db.prepare(sql).bind(...(language ? [language] : [])).first<CountRow>()
   return (result?.count as number) ?? 0
 }
 
 // 根据分类获取文章数
-export async function getPostsCountByCategory(db: Database, category: string): Promise<number> {
+export async function getPostsCountByCategory(db: Database, category: string, language?: Language): Promise<number> {
   const result = await db
     .prepare(
       `SELECT COUNT(*) as count
@@ -386,9 +406,10 @@ export async function getPostsCountByCategory(db: Database, category: string): P
          AND status = 'published'
          AND password IS NULL
          AND is_hidden = 0
-         AND deleted_at IS NULL`,
+         AND deleted_at IS NULL
+         ${language ? 'AND language = ?' : ''}`,
     )
-    .bind(category)
+    .bind(category, ...(language ? [language] : []))
     .first<CountRow>()
   return (result?.count as number) ?? 0
 }
@@ -399,20 +420,22 @@ export async function getPostsByCategory(
   category: string,
   limit = 50,
   offset = 0,
+  language?: Language,
 ): Promise<PostWithTags[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, slug, title, description, category, tags, status, password, is_pinned, is_hidden, deleted_at, published_at, view_count
+      `SELECT id, slug, title, description, category, tags, status, password, is_pinned, is_hidden, deleted_at, published_at, view_count, language, translation_group_id
        FROM posts
        WHERE category = ?
          AND status = 'published'
          AND password IS NULL
          AND is_hidden = 0
          AND deleted_at IS NULL
+         ${language ? 'AND language = ?' : ''}
        ORDER BY is_pinned DESC, published_at DESC
        LIMIT ? OFFSET ?`,
     )
-    .bind(category, limit, offset)
+    .bind(category, ...(language ? [language] : []), limit, offset)
     .all<Post>()
 
   return results.map(mapPostWithTags)

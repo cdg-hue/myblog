@@ -1,12 +1,17 @@
 import Link from 'next/link'
+import { type Language } from '@/lib/i18n'
+import { publicPath, publicText } from '@/lib/public-i18n'
 
 interface PaginationProps {
   currentPage: number
   totalPages: number
   basePath: string
+  language?: Language
 }
 
-export function Pagination({ currentPage, totalPages, basePath }: PaginationProps) {
+export function Pagination({ currentPage, totalPages, basePath, language = 'zh-CN' }: PaginationProps) {
+  basePath = publicPath(basePath, language)
+  const t = (text: string) => publicText(language, text)
   if (totalPages <= 1) return null
 
   const pages: (number | '...')[] = []
@@ -22,13 +27,13 @@ export function Pagination({ currentPage, totalPages, basePath }: PaginationProp
     page === 1 ? basePath : `${basePath}${basePath.includes('?') ? '&' : '?'}page=${page}`
 
   return (
-    <nav className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-12" aria-label="分页导航">
+    <nav className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-12" aria-label={t('分页导航')}>
       {currentPage > 1 && (
         <Link
           href={href(currentPage - 1)}
           className="px-2.5 sm:px-3 py-2 text-sm rounded-lg text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-soft)] transition-all duration-150"
         >
-          ← <span className="hidden xs:inline">上一页</span>
+          ← <span className="hidden xs:inline">{t('上一页')}</span>
         </Link>
       )}
 
@@ -41,6 +46,7 @@ export function Pagination({ currentPage, totalPages, basePath }: PaginationProp
           <Link
             key={p}
             href={href(p)}
+            aria-current={p === currentPage ? 'page' : undefined}
             className={`min-w-[2rem] sm:min-w-[2.25rem] px-2 sm:px-3 py-2 text-sm text-center rounded-lg transition-all duration-150 ${
               p === currentPage
                 ? 'bg-[var(--editor-ink)] text-[var(--editor-panel)] font-semibold shadow-sm'
@@ -57,7 +63,7 @@ export function Pagination({ currentPage, totalPages, basePath }: PaginationProp
           href={href(currentPage + 1)}
           className="px-2.5 sm:px-3 py-2 text-sm rounded-lg text-[var(--editor-muted)] hover:text-[var(--editor-ink)] hover:bg-[var(--editor-soft)] transition-all duration-150"
         >
-          <span className="hidden xs:inline">下一页</span> →
+          <span className="hidden xs:inline">{t('下一页')}</span> →
         </Link>
       )}
     </nav>

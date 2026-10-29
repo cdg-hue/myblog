@@ -2,7 +2,11 @@ import { resolve } from "node:path";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
-void initOpenNextCloudflareForDev();
+const devConfigPath = process.env.CLOUDFLARE_DEV_CONFIG;
+void initOpenNextCloudflareForDev(devConfigPath ? {
+  configPath: devConfigPath,
+  persist: { path: process.env.CLOUDFLARE_DEV_PERSIST_PATH || '.wrangler/bilingual-preview-state' },
+} : undefined);
 
 const nextConfig: NextConfig = {
   // 图片优化（Cloudflare 有自己的优化）

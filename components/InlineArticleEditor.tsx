@@ -16,7 +16,6 @@ import {
 } from '@/lib/editor-extensions'
 import { InputModal } from '@/components/InputModal'
 import { CategorySelector } from '@/components/CategorySelector'
-import { DownloadMarkdown } from '@/components/DownloadMarkdown'
 import { ImageGenerationModal } from '@/components/ImageGenerationModal'
 import { ImageCropModal } from '@/components/ImageCropModal'
 import { AIModal } from '@/lib/ai-modal'
@@ -494,7 +493,6 @@ export function InlineArticleEditor({
             <span>约 {Math.max(1, Math.ceil(content.length / 400))} 分钟</span>
           </>
         )}
-        <DownloadMarkdown title={title} html={html} />
         {password && (
           <>
             <span aria-hidden>·</span>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { usePublicLocale } from '@/components/PublicLocale'
 import {
   getClientThemePreference,
   subscribeToThemeChange,
@@ -40,6 +41,7 @@ export function ThemeDropdown({
   initialTheme = 'default',
   onThemeChange,
 }: ThemeDropdownProps = {}) {
+  const { t: tLabel } = usePublicLocale()
   const theme = useSyncExternalStore(
     subscribeToThemeChange,
     () => getClientThemePreference(initialTheme),
@@ -97,7 +99,7 @@ export function ThemeDropdown({
           ...buttonStyle,
         }}
       >
-        主题
+        {tLabel('主题')}
         <ChevronDown
           style={{
             width: 13,
@@ -156,7 +158,7 @@ export function ThemeDropdown({
                   if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
                 }}
               >
-                {t.label}
+                {tLabel(t.label)}
               </button>
             )
           })}

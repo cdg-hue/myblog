@@ -8,8 +8,9 @@ import Link from 'next/link'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SearchEntry } from '@/components/SearchEntry'
 import { Pagination } from '@/components/Pagination'
-import { ThemeDropdown } from '@/components/ThemeDropdown'
 import type { HomeProps } from '@/components/HomeClient'
+import { LanguageSwitcher, usePublicLocale } from '@/components/PublicLocale'
+import { formatPublicDate } from '@/lib/public-i18n'
 import type { SiteNavLink } from '@/lib/site'
 
 const ACCENT = '#c44a2a' // editorial red-orange
@@ -17,10 +18,6 @@ const BG = '#f6f3ed'
 const FG = '#1a1614'
 const MUTED = '#7a6f68'
 const BORDER = '#d8d2c8'
-
-function formatDate(ts: number) {
-  return new Date(ts * 1000).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
-}
 
 function getIssueInfo() {
   const now = new Date()
@@ -31,12 +28,11 @@ function getIssueInfo() {
 }
 
 function EditorialNavBar({
-  initialTheme,
   navLinks,
 }: {
-  initialTheme: HomeProps['initialTheme']
   navLinks: SiteNavLink[]
 }) {
+  const { language, t, path } = usePublicLocale()
   const defaultLinks = [
     { label: 'GitHub', url: 'https://github.com/joeseesun/', openInNewTab: true },
     { label: 'Twitter', url: 'https://x.com/vista8/', openInNewTab: true },
@@ -60,15 +56,15 @@ function EditorialNavBar({
         fontFamily: '"JetBrains Mono", ui-monospace, monospace',
         textTransform: 'uppercase',
       }}>
-        VOL. {vol} · {year}年{month}月
+        VOL. {vol} · {language === 'en' ? `${year}/${String(month).padStart(2, '0')}` : `${year}年${month}月`}
       </div>
       <nav className="editorial-nav-links" style={{ display: 'flex', gap: 20, alignItems: 'center', fontSize: 12, letterSpacing: '0.08em', fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
-        <Link href="/" style={{ color: FG, textDecoration: 'none' }}>首页</Link>
+        <Link href={path('/')} style={{ color: FG, textDecoration: 'none' }}>{t('首页')}</Link>
         {links.map(link => (
           link.url.startsWith('http') ? (
             <a
               key={link.label}
-              href={link.url}
+              href={path(link.url)}
               target={link.openInNewTab ? '_blank' : undefined}
               rel={link.openInNewTab ? 'noopener noreferrer' : undefined}
               style={{ color: FG, textDecoration: 'none' }}
@@ -76,19 +72,12 @@ function EditorialNavBar({
               {link.label}
             </a>
           ) : (
-            <Link key={link.label} href={link.url} style={{ color: FG, textDecoration: 'none' }}>
+            <Link key={link.label} href={path(link.url)} style={{ color: FG, textDecoration: 'none' }}>
               {link.label}
             </Link>
           )
         ))}
-        {/* Theme dropdown — editorial style, self-contained */}
-        <ThemeDropdown
-          initialTheme={initialTheme}
-          buttonStyle={{ color: FG, fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 12, letterSpacing: '0.08em' }}
-          dropdownStyle={{ background: BG, border: `1px solid ${BORDER}`, fontFamily: '"JetBrains Mono", monospace' }}
-          itemStyle={{ color: FG, fontSize: 12 }}
-          activeItemStyle={{ background: ACCENT, color: '#ffffff' }}
-        />
+        <LanguageSwitcher />
         {/* Search */}
         <div style={{ color: FG }}>
           <SearchEntry />
@@ -99,12 +88,12 @@ function EditorialNavBar({
 }
 
 export function HomeVariantB({
-  initialTheme,
   posts,
   navLinks,
   currentPage,
   totalPages,
 }: HomeProps) {
+  const { language, t, path, postPath, categoryName } = usePublicLocale()
   const [hoverId, setHoverId] = useState<string | null>(null)
 
   const featured = posts[0] ?? null
@@ -112,11 +101,11 @@ export function HomeVariantB({
 
   return (
     <div className="theme-home-editorial" style={{ background: BG, color: FG, minHeight: '100vh', fontFamily: '"PingFang SC", "Noto Sans SC", system-ui, sans-serif' }}>
-      <EditorialNavBar initialTheme={initialTheme} navLinks={navLinks} />
+      <EditorialNavBar navLinks={navLinks} />
 
       {/* Giant masthead */}
       <div className="editorial-masthead" style={{ padding: '36px 48px 20px', borderBottom: `1px solid ${BORDER}` }}>
-        <Link href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+        <Link href={path('/')} style={{ textDecoration: 'none', color: 'inherit' }}>
           <h1 className="editorial-masthead-title" style={{
             margin: 0,
             fontSize: 'clamp(72px, 12vw, 180px)',
@@ -126,7 +115,7 @@ export function HomeVariantB({
             fontFamily: '"Noto Serif SC", "Source Han Serif SC", Georgia, serif',
             color: FG,
           }}>
-            阿成
+            {t('阿成')}
           </h1>
         </Link>
         <div className="editorial-masthead-meta" style={{
@@ -139,14 +128,15 @@ export function HomeVariantB({
           letterSpacing: '0.05em',
         }}>
           <span>AI · PRODUCT · INDEPENDENT THINKING</span>
-          <span>{posts.length} ARTICLES</span>
+          <span>{posts.length} {language === 'en' ? (posts.length === 1 ? 'ARTICLE' : 'ARTICLES') : '篇文章'}</span>
         </div>
       </div>
 
+      {posts.length === 0 && <div className="px-6 py-20 text-center">{t('还没有文章')}</div>}
       {/* Featured article */}
       {featured && (
         <section className="editorial-featured" style={{ padding: '44px 48px', borderBottom: `1px solid ${BORDER}` }}>
-          <Link href={`/${featured.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link href={postPath(featured.slug)} style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="editorial-featured-grid" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 48, alignItems: 'start' }}>
               <div>
                 <div style={{
@@ -157,7 +147,7 @@ export function HomeVariantB({
                   marginBottom: 18,
                   textTransform: 'uppercase',
                 }}>
-                  ★ HEADLINE · 头条
+                  {t('★ HEADLINE · 头条')}
                 </div>
                 <h2
                   style={{
@@ -176,7 +166,7 @@ export function HomeVariantB({
                   {featured.title}
                   {featured.password && ' 🔒'}
                   {featured.is_pinned === 1 && (
-                    <span style={{ fontSize: '0.5em', color: MUTED, marginLeft: 8 }}>置顶</span>
+                    <span style={{ fontSize: '0.5em', color: MUTED, marginLeft: 8 }}>{t('置顶')}</span>
                   )}
                 </h2>
                 {featured.description && (
@@ -194,11 +184,11 @@ export function HomeVariantB({
                   fontFamily: '"JetBrains Mono", ui-monospace, monospace',
                   letterSpacing: '0.05em',
                 }}>
-                  <span>{formatDate(featured.published_at)}</span>
+                  <span>{formatPublicDate(featured.published_at, language)}</span>
                   {featured.category && (
                     <>
                       <span>·</span>
-                      <span style={{ color: ACCENT }}>{featured.category}</span>
+                      <span style={{ color: ACCENT }}>{categoryName(featured.category)}</span>
                     </>
                   )}
                   <span style={{ flex: 1, height: 1, background: BORDER }} />
@@ -254,7 +244,7 @@ export function HomeVariantB({
               letterSpacing: '0.2em',
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             }}>
-              THE INDEX · 文章一览
+              {t('THE INDEX · 文章一览')}
             </h3>
             <span style={{ fontSize: 10, color: MUTED, fontFamily: '"JetBrains Mono", ui-monospace, monospace', letterSpacing: '0.1em' }}>
               NO.02 — NO.{String(posts.length).padStart(2, '0')}
@@ -265,7 +255,7 @@ export function HomeVariantB({
             {rest.map((post, i) => (
               <Link
                 key={post.slug}
-                href={`/${post.slug}`}
+                href={postPath(post.slug)}
                 style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 18, cursor: 'pointer' }}
                 onMouseEnter={() => setHoverId(post.slug)}
                 onMouseLeave={() => setHoverId(null)}
@@ -292,7 +282,7 @@ export function HomeVariantB({
                       marginBottom: 8,
                       textTransform: 'uppercase',
                     }}>
-                      {post.category}
+                      {categoryName(post.category)}
                     </div>
                   )}
                   <h4 style={{
@@ -337,7 +327,7 @@ export function HomeVariantB({
                     </p>
                   )}
                   <div style={{ fontSize: 11, color: MUTED, fontFamily: '"JetBrains Mono", ui-monospace, monospace', letterSpacing: '0.04em' }}>
-                    {formatDate(post.published_at)}
+                    {formatPublicDate(post.published_at, language)}
                   </div>
                 </div>
               </Link>
@@ -345,10 +335,12 @@ export function HomeVariantB({
           </div>
 
           <div style={{ paddingTop: 40 }}>
-            <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" />
+
           </div>
         </section>
       )}
+
+      <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" language={language} />
 
       {/* Footer strip */}
       <div className="editorial-footer-strip" style={{
@@ -361,8 +353,8 @@ export function HomeVariantB({
         fontFamily: '"JetBrains Mono", ui-monospace, monospace',
         letterSpacing: '0.1em',
       }}>
-        <span>© {new Date().getFullYear()} 阿成</span>
-        <span>独立 · 不商业化 · RSS 友好</span>
+        <span>© {new Date().getFullYear()} {t('阿成')}</span>
+        <span>{t('独立 · 不商业化 · RSS 友好')}</span>
       </div>
 
       {/* Standard footer with admin entry */}

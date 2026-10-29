@@ -9,6 +9,7 @@ import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
 import { Pagination } from '@/components/Pagination'
 import type { HomeProps } from '@/components/HomeClient'
+import { usePublicLocale } from '@/components/PublicLocale'
 
 function formatDateShort(ts: number) {
   const d = new Date(ts * 1000)
@@ -46,6 +47,7 @@ export function HomeVariantA({
   currentPage,
   totalPages,
 }: HomeProps) {
+  const { language, t, postPath, categoryName } = usePublicLocale()
   const [hoverId, setHoverId] = useState<string | null>(null)
 
   return (
@@ -60,7 +62,7 @@ export function HomeVariantA({
         {/* Post list */}
         {posts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--stone-gray)', fontSize: 14 }}>
-            还没有文章
+            {t('还没有文章')}
           </div>
         ) : (
           <>
@@ -79,7 +81,7 @@ export function HomeVariantA({
                     onMouseLeave={() => setHoverId(null)}
                   >
                     <Link
-                      href={`/${post.slug}`}
+                      href={postPath(post.slug)}
                       className="refined-post-link"
                       style={{
                         display: 'grid',
@@ -99,7 +101,7 @@ export function HomeVariantA({
                         lineHeight: 1.6,
                         flexShrink: 0,
                       }}>
-                        <div>{formatDateShort(post.published_at)}</div>
+                        <div>{language === 'en' ? new Date(post.published_at * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Shanghai' }) : formatDateShort(post.published_at)}</div>
                         <div style={{ fontSize: 11, opacity: 0.7 }}>{formatYear(post.published_at)}</div>
                       </div>
 
@@ -124,7 +126,7 @@ export function HomeVariantA({
                               color: catColor,
                               fontWeight: 500,
                             }}>
-                              {post.category}
+                              {categoryName(post.category)}
                             </span>
                             {post.is_pinned === 1 && (
                               <span style={{
@@ -133,7 +135,7 @@ export function HomeVariantA({
                                 fontFamily: '"JetBrains Mono", ui-monospace, monospace',
                                 letterSpacing: '0.05em',
                               }}>
-                                · 置顶
+                                · {t('置顶')}
                               </span>
                             )}
                           </div>
@@ -186,7 +188,7 @@ export function HomeVariantA({
                           alignItems: 'center',
                           gap: 4,
                         }}>
-                          <span>阅读全文</span>
+                          <span>{t('阅读全文')}</span>
                           <span style={{
                             display: 'inline-block',
                             transition: 'transform .25s',
@@ -201,7 +203,7 @@ export function HomeVariantA({
             </div>
 
             <div style={{ paddingTop: 16 }}>
-              <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" />
+              <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" language={language} />
             </div>
           </>
         )}

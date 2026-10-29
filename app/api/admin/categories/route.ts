@@ -7,16 +7,19 @@ import {
   parseJsonBody,
 } from '@/lib/server/route-helpers'
 import type { NextRequest } from 'next/server'
+import { invalidatePublicContentCache } from '@/lib/cache'
 
 interface CreateCategoryBody {
   name?: string
   slug?: string
+  name_en?: unknown
 }
 
 interface UpdateCategoryBody {
   oldSlug?: string
   name?: string
   slug?: string
+  name_en?: unknown
 }
 
 interface DeleteCategoryBody {
@@ -46,12 +49,15 @@ export async function POST(req: NextRequest) {
     const authError = await ensureAuthenticatedRequest(req, route.db, '未授权')
     if (authError) return authError
 
-    const { name, slug } = await parseJsonBody<CreateCategoryBody>(req)
+    const { name, slug, name_en } = await parseJsonBody<CreateCategoryBody>(req)
     if (!name || !slug) {
       return jsonError('名称和slug不能为空', 400)
     }
+    if (name_en !== undefined && (typeof name_en !== 'string' || name_en.length > 120)) return jsonError('英文分类名称格式不正确', 400)
 
-    await createCategory(route.db, name, slug)
+    if (typeof name_en === 'string') await createCategory(route.db, name, slug, name_en)
+    else await createCategory(route.db, name, slug)
+    await invalidatePublicContentCache(route.env)
     return jsonOk({ success: true })
   } catch (err) {
     return jsonError(String(err), 500)
@@ -65,12 +71,15 @@ export async function PATCH(req: NextRequest) {
     const authError = await ensureAuthenticatedRequest(req, route.db, '未授权')
     if (authError) return authError
 
-    const { oldSlug, name, slug } = await parseJsonBody<UpdateCategoryBody>(req)
+    const { oldSlug, name, slug, name_en } = await parseJsonBody<UpdateCategoryBody>(req)
     if (!oldSlug || !name || !slug) {
       return jsonError('参数不完整', 400)
     }
+    if (name_en !== undefined && (typeof name_en !== 'string' || name_en.length > 120)) return jsonError('英文分类名称格式不正确', 400)
 
-    await updateCategory(route.db, oldSlug, name, slug)
+    if (typeof name_en === 'string') await updateCategory(route.db, oldSlug, name, slug, name_en)
+    else await updateCategory(route.db, oldSlug, name, slug)
+    await invalidatePublicContentCache(route.env)
     return jsonOk({ success: true })
   } catch (err) {
     return jsonError(String(err), 500)
@@ -90,6 +99,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await deleteCategory(route.db, slug)
+    await invalidatePublicContentCache(route.env)
     return jsonOk({ success: true })
   } catch (err) {
     return jsonError(String(err), 500)

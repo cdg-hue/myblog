@@ -17,6 +17,7 @@ export {
   deletePost,
   getPostAiSnapshot,
   getPostBySlug,
+  getPostById,
   getPosts,
   getPostsByCategory,
   getPostsCount,
@@ -28,6 +29,7 @@ export {
   updatePost,
   updatePostBySlug,
 } from '@/lib/repositories/posts'
+export { getTranslations, createTranslation, linkTranslation, unlinkTranslation } from '@/lib/repositories/translations'
 export { searchPosts } from '@/lib/repositories/search'
 export {
   createCategory,

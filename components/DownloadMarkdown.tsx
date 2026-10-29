@@ -4,6 +4,7 @@ import { useToast } from '@/components/Toast'
 import { copyAsWechatArticleFormat, downloadArticleAsPdf } from '@/lib/wechat-copy'
 import { Copy, FileDown } from 'lucide-react'
 import TurndownService from 'turndown'
+import { usePublicLocale } from '@/components/PublicLocale'
 
 const URL_ATTRIBUTES = [
   ['img', 'src'],
@@ -40,6 +41,7 @@ function absolutizeHtmlUrls(html: string) {
 }
 
 export function DownloadMarkdown({ title, html }: { title: string; html: string }) {
+  const { language, t } = usePublicLocale()
   const toast = useToast()
 
   const handleDownload = () => {
@@ -63,9 +65,9 @@ export function DownloadMarkdown({ title, html }: { title: string; html: string 
   const handleCopyWechat = async () => {
     try {
       await copyAsWechatArticleFormat(title, html)
-      toast.success('已复制公众号格式')
+      toast.success(t('已复制公众号格式'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '复制公众号格式失败')
+      toast.error(language === 'en' ? t('复制公众号格式失败') : error instanceof Error ? error.message : '复制公众号格式失败')
     }
   }
 
@@ -73,7 +75,7 @@ export function DownloadMarkdown({ title, html }: { title: string; html: string 
     try {
       await downloadArticleAsPdf(title, html)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '导出 PDF 失败')
+      toast.error(language === 'en' ? t('导出 PDF 失败') : error instanceof Error ? error.message : '导出 PDF 失败')
     }
   }
 
@@ -81,7 +83,8 @@ export function DownloadMarkdown({ title, html }: { title: string; html: string 
     <span className="inline-flex items-center gap-1">
       <button
         onClick={handleDownload}
-        title="下载 Markdown"
+        title={t('下载 Markdown')}
+        aria-label={t('下载 Markdown')}
         className="inline-flex items-center justify-center rounded p-1 text-[var(--stone-gray)] hover:text-[var(--editor-accent)] hover:bg-[var(--editor-accent)]/8 transition-colors"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -92,14 +95,16 @@ export function DownloadMarkdown({ title, html }: { title: string; html: string 
       </button>
       <button
         onClick={handleCopyWechat}
-        title="复制公众号格式"
+        title={t('复制公众号格式')}
+        aria-label={t('复制公众号格式')}
         className="inline-flex items-center justify-center rounded p-1 text-[var(--stone-gray)] hover:text-[var(--editor-accent)] hover:bg-[var(--editor-accent)]/8 transition-colors"
       >
         <Copy className="h-3.5 w-3.5" />
       </button>
       <button
         onClick={handleDownloadPdf}
-        title="下载 PDF"
+        title={t('下载 PDF')}
+        aria-label={t('下载 PDF')}
         className="inline-flex items-center justify-center rounded p-1 text-[var(--stone-gray)] hover:text-[var(--editor-accent)] hover:bg-[var(--editor-accent)]/8 transition-colors"
       >
         <FileDown className="h-3.5 w-3.5" />

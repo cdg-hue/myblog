@@ -18,6 +18,7 @@ import { ThirdPartyPublishingManager } from './ThirdPartyPublishingManager'
 
 interface Category {
   name: string
+  name_en?: string | null
   slug: string
   post_count: number
 }

@@ -71,6 +71,7 @@ describe('/api/editor/ai-post-metadata route', () => {
 
     expect(mocks.generatePostMetadata).toHaveBeenCalledWith({
       target: 'summary',
+      language: 'zh-CN',
       title: 'Ask AI 标题',
       content: '正文内容',
       category: 'AI',

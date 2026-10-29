@@ -10,6 +10,7 @@ import { PasswordModal } from '@/components/PasswordModal'
 import { Dropdown } from '@/components/Dropdown'
 import type { PostWithTags } from '@/lib/db'
 import { getSiteUrl } from '@/lib/site-config'
+import { getPostPath, languageLabel } from '@/lib/i18n'
 
 interface PostRowProps {
   post: PostWithTags
@@ -44,9 +45,9 @@ export function PostRow({ post, categories }: PostRowProps) {
   const toast = useToast()
 
   const siteUrl = getSiteUrl()
-  const baseArticleUrl = `${siteUrl}/${post.slug}`
+  const baseArticleUrl = `${siteUrl}${getPostPath(post.slug, post.language)}`
   const articleUrl = post.password
-    ? `${baseArticleUrl}?pwd=${post.password}`
+    ? `${baseArticleUrl}?pwd=${encodeURIComponent(post.password)}`
     : baseArticleUrl
 
   const isDeleted = post.status === 'deleted'
@@ -214,7 +215,8 @@ export function PostRow({ post, categories }: PostRowProps) {
         toast.success('已恢复为草稿')
         router.refresh()
       } else {
-        toast.error('恢复失败')
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        toast.error(data.error || '恢复失败')
       }
     } catch {
       toast.error('网络错误')
@@ -289,11 +291,14 @@ export function PostRow({ post, categories }: PostRowProps) {
         {/* 标题列 */}
         <div className="min-w-0">
           <Link
-            href={`/editor?edit=${post.slug}`}
+            href={`/editor?edit=${encodeURIComponent(post.slug)}`}
             className="font-medium text-[var(--editor-ink)] hover:text-[var(--editor-accent)] transition-colors line-clamp-1 block"
           >
             {post.title}
           </Link>
+          <span className="mt-1 inline-block rounded border border-[var(--editor-line)] px-1.5 py-0.5 text-[10px] text-[var(--editor-muted)]">
+            {languageLabel(post.language)}
+          </span>
           {post.description && (
             <p className="text-xs text-[var(--editor-muted)] line-clamp-1 leading-relaxed mt-0.5">
               {post.description}
@@ -327,6 +332,14 @@ export function PostRow({ post, categories }: PostRowProps) {
         <div className="flex items-center justify-end gap-1">
           {isDeleted ? (
             <>
+              <Link
+                href={`/editor?edit=${encodeURIComponent(post.slug)}`}
+                className="p-1.5 rounded hover:bg-[var(--editor-soft)] transition-colors"
+                title="管理译文关联"
+                aria-label="管理译文关联"
+              >
+                <Link2 className="w-4 h-4 text-[var(--stone-gray)]" />
+              </Link>
               <button
                 onClick={handleRestore}
                 disabled={loading}
@@ -361,7 +374,7 @@ export function PostRow({ post, categories }: PostRowProps) {
                 <Link2 className="w-4 h-4 text-[var(--stone-gray)]" />
               </button>
               <Link
-                href={`/editor?edit=${post.slug}`}
+                href={`/editor?edit=${encodeURIComponent(post.slug)}`}
                 className="p-1.5 rounded hover:bg-[var(--editor-soft)] transition-colors"
                 title="编辑"
               >
@@ -450,7 +463,7 @@ export function PostRow({ post, categories }: PostRowProps) {
 
           {/* 标题 */}
           <Link
-            href={`/editor?edit=${post.slug}`}
+            href={`/editor?edit=${encodeURIComponent(post.slug)}`}
             className="font-medium text-[var(--editor-ink)] hover:text-[var(--editor-accent)] transition-colors flex-1 line-clamp-2"
           >
             {post.title}
@@ -463,7 +476,8 @@ export function PostRow({ post, categories }: PostRowProps) {
           </p>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-[var(--stone-gray)] mb-3 ml-9">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--stone-gray)] mb-3 ml-9">
+          <span className="rounded border border-[var(--editor-line)] px-1.5 py-0.5">{languageLabel(post.language)}</span>
           <div className="w-24">
             <Dropdown
               options={categoryOptions}
@@ -478,6 +492,11 @@ export function PostRow({ post, categories }: PostRowProps) {
           <span className="tabular-nums">{post.view_count.toLocaleString()} 次</span>
           <span>·</span>
           <span>{formatDate(post.published_at)}</span>
+          {isDeleted && (
+            <Link href={`/editor?edit=${encodeURIComponent(post.slug)}`} title="管理译文关联" className="p-1.5 text-[var(--editor-accent)]">
+              <Link2 className="h-4 w-4" />
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-2 ml-9 flex-wrap">

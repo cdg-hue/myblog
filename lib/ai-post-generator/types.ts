@@ -46,6 +46,7 @@ export interface GeneratePostMetadataInput {
   description?: string
   tags?: string[]
   currentSlug?: string
+  language?: import('@/lib/i18n').Language
   db: D1Database
   env?: Partial<CloudflareEnv> | null
 }

@@ -67,7 +67,7 @@ describe('/api/search route', () => {
       { kind: 'db' },
       { DB: { kind: 'db' } },
       'ask ai',
-      { limit: 50 },
+      { limit: 50, language: 'zh-CN' },
     )
     expect(body).toEqual({
       strategy: 'vector',
@@ -80,6 +80,7 @@ describe('/api/search route', () => {
           category: 'AI',
           published_at: 1710000000,
           password: true,
+          language: 'zh-CN',
         },
       ],
     })

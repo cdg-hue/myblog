@@ -9,6 +9,7 @@ import { SearchEntry } from '@/components/SearchEntry'
 import { Pagination } from '@/components/Pagination'
 import { ThemeDropdown } from '@/components/ThemeDropdown'
 import type { HomeProps } from '@/components/HomeClient'
+import { LanguageSwitcher, usePublicLocale } from '@/components/PublicLocale'
 import type { SiteNavLink } from '@/lib/site'
 
 const BG = '#1a1c2e'
@@ -33,6 +34,7 @@ function TerminalHeader({
   initialTheme: HomeProps['initialTheme']
   navLinks: SiteNavLink[]
 }) {
+  const { path } = usePublicLocale()
   const defaultLinks = [
     { label: '~/github', url: 'https://github.com/joeseesun/', openInNewTab: true },
     { label: '~/twitter', url: 'https://x.com/vista8/', openInNewTab: true },
@@ -55,7 +57,7 @@ function TerminalHeader({
       {/* Left: terminal prompt */}
       <div className="terminal-home-prompt" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: ACCENT, display: 'inline-block', boxShadow: `0 0 10px ${ACCENT}` }} />
-        <Link href="/" style={{ color: MUTED, textDecoration: 'none' }}>acheng@blog:~$</Link>
+        <Link href={path('/')} style={{ color: MUTED, textDecoration: 'none' }}>acheng@blog:~$</Link>
         <span style={{ color: FG }}>./serve --port=443</span>
       </div>
 
@@ -65,7 +67,7 @@ function TerminalHeader({
           link.url.startsWith('http') ? (
             <a
               key={link.label}
-              href={link.url}
+              href={path(link.url)}
               target={link.openInNewTab ? '_blank' : undefined}
               rel={link.openInNewTab ? 'noopener noreferrer' : undefined}
               style={{ color: MUTED, textDecoration: 'none', transition: 'color .15s' }}
@@ -75,12 +77,13 @@ function TerminalHeader({
               {link.label}
             </a>
           ) : (
-            <Link key={link.label} href={link.url} style={{ color: MUTED, textDecoration: 'none' }}>
+            <Link key={link.label} href={path(link.url)} style={{ color: MUTED, textDecoration: 'none' }}>
               {link.label}
             </Link>
           )
         ))}
 
+        <LanguageSwitcher />
         {/* Theme dropdown — terminal style, self-contained */}
         <ThemeDropdown
           initialTheme={initialTheme}
@@ -111,11 +114,12 @@ export function HomeVariantC({
   currentPage,
   totalPages,
 }: HomeProps) {
+  const { language, t, postPath, categoryName } = usePublicLocale()
   const [query, setQuery] = useState('')
   const [cursorOn, setCursorOn] = useState(true)
   const [typed, setTyped] = useState('')
   const [hoverId, setHoverId] = useState<string | null>(null)
-  const fullText = '独立 · AI · 产品 · 思考'
+  const fullText = t('独立 · AI · 产品 · 思考')
 
   useEffect(() => {
     const iv = setInterval(() => setCursorOn(c => !c), 530)
@@ -134,9 +138,9 @@ export function HomeVariantC({
 
   const filtered = query
     ? posts.filter(p =>
-        p.title.includes(query) ||
-        (p.category ?? '').includes(query) ||
-        (p.description ?? '').includes(query)
+        p.title.toLowerCase().includes(query.toLowerCase()) ||
+        categoryName(p.category).toLowerCase().includes(query.toLowerCase()) ||
+        (p.description ?? '').toLowerCase().includes(query.toLowerCase())
       )
     : posts
 
@@ -174,13 +178,13 @@ export function HomeVariantC({
             overflow: 'hidden',
           }}>
 {`  ┌────────────────────────────────────┐
-  │  QIAOMU BLOG  ·  阿成          │
+  │  ACHENG BLOG · ${language === 'en' ? 'Acheng' : '阿成'}             │
   │  ~/posts  —  reading the future     │
   └────────────────────────────────────┘`}
           </div>
           <div className="terminal-banner-meta" style={{ marginTop: 14, fontSize: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ color: ACCENT2 }}>&gt;</span>
-            <span style={{ color: FG }}>阿成</span>
+            <span style={{ color: FG }}>{t('阿成')}</span>
             <span style={{ color: MUTED }}>{'//'}</span>
             <span style={{ color: MUTED }}>
               {typed}
@@ -223,7 +227,8 @@ export function HomeVariantC({
             className="terminal-grep-input"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder='"关键词" ./posts/'
+            placeholder={language === 'en' ? '"keyword" ./posts/' : '"关键词" ./posts/'}
+            aria-label={t('搜索')}
             style={{
               flex: 1,
               background: 'transparent',
@@ -235,7 +240,7 @@ export function HomeVariantC({
               caretColor: ACCENT,
             }}
           />
-          <span style={{ color: MUTED, fontSize: 11 }}>{filtered.length} match</span>
+          <span style={{ color: MUTED, fontSize: 11 }}>{filtered.length} {language === 'en' ? (filtered.length === 1 ? 'match' : 'matches') : '条匹配'}</span>
         </div>
 
         {/* Directory listing header */}
@@ -257,13 +262,13 @@ export function HomeVariantC({
         <div style={{ borderTop: `1px dashed ${BORDER}`, borderBottom: `1px dashed ${BORDER}` }}>
           {filtered.length === 0 ? (
             <div style={{ padding: '32px 10px', color: MUTED, fontSize: 13 }}>
-              {'// '}no matches for &quot;{query}&quot;
+              {'// '}{query ? (language === 'en' ? `No matches for “${query}”` : `未找到“${query}”`) : t('还没有文章')}
             </div>
           ) : (
             filtered.map((post, i) => (
               <Link
                 key={post.slug}
-                href={`/${post.slug}`}
+                href={postPath(post.slug)}
                 className="terminal-post-row"
                 style={{
                   display: 'grid',
@@ -283,7 +288,7 @@ export function HomeVariantC({
                   {formatDateCompact(post.published_at)}
                 </span>
                 <span className="terminal-post-category" style={{ color: ACCENT2, fontSize: 11 }}>
-                  [{post.category || 'misc'}]
+                  [{post.category ? categoryName(post.category) : language === 'en' ? 'misc' : '未分类'}]
                 </span>
                 <div className="terminal-post-body">
                   <div className="terminal-post-title" style={{
@@ -330,7 +335,7 @@ export function HomeVariantC({
 
         {/* Terminal footer prompt */}
         <div style={{ padding: '24px 0 16px', fontSize: 12, color: MUTED }}>
-          <div>{'$ echo "感谢阅读，保持思考。"'}</div>
+          <div>{`$ echo "${t('感谢阅读，保持思考。')}"`}</div>
           <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ color: ACCENT }}>▊</span>
             <span style={{ color: MUTED }}>exit 0</span>
@@ -338,7 +343,7 @@ export function HomeVariantC({
         </div>
 
         <div style={{ paddingBottom: 80 }}>
-          <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" />
+          <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" language={language} />
         </div>
       </div>
 

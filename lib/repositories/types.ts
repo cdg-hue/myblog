@@ -1,3 +1,5 @@
+import type { Language } from '@/lib/i18n'
+
 export interface Post {
   id: number
   slug: string
@@ -16,6 +18,8 @@ export interface Post {
   published_at: number
   updated_at: number
   view_count: number
+  language?: Language
+  translation_group_id?: string | null
 }
 
 export interface PostWithTags extends Omit<Post, 'tags'> {
@@ -35,6 +39,7 @@ export interface CategoryRow {
   name: string
   slug: string
   post_count: number
+  name_en?: string | null
 }
 
 export interface SettingRow {
@@ -54,6 +59,7 @@ export interface PostAiSnapshotRow {
   description: string | null
   tags: string | null
   deleted_at: number | null
+  language?: Language
 }
 
 export function isPubliclyAccessiblePost(

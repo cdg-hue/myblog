@@ -7,6 +7,7 @@ import { Modal } from '@/components/Modal'
 
 interface Category {
   name: string
+  name_en?: string | null
   slug: string
   post_count: number
 }
@@ -14,11 +15,13 @@ interface Category {
 export function CategoryManager({ initialCategories }: { initialCategories: Category[] }) {
   const [categories, setCategories] = useState(initialCategories)
   const [name, setName] = useState('')
+  const [nameEn, setNameEn] = useState('')
   const [slug, setSlug] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [editingSlug, setEditingSlug] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editNameEn, setEditNameEn] = useState('')
   const [editSlugVal, setEditSlugVal] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ slug: string; name: string } | null>(null)
   const router = useRouter()
@@ -34,17 +37,18 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       const res = await fetch('/api/admin/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
+        body: JSON.stringify({ name: name.trim(), name_en: nameEn.trim(), slug: slug.trim() }),
       })
       if (!res.ok) {
         const data = (await res.json()) as { error?: string }
         throw new Error(data.error || '创建失败')
       }
       setName('')
+      setNameEn('')
       setSlug('')
       router.refresh()
       // Optimistic update
-      setCategories((prev) => [...prev, { name: name.trim(), slug: slug.trim(), post_count: 0 }])
+      setCategories((prev) => [...prev, { name: name.trim(), name_en: nameEn.trim(), slug: slug.trim(), post_count: 0 }])
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建失败')
     } finally {
@@ -83,29 +87,33 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
   const startEditing = (cat: Category) => {
     setEditingSlug(cat.slug)
     setEditName(cat.name)
+    setEditNameEn(cat.name_en || '')
     setEditSlugVal(cat.slug)
   }
 
   const handleUpdate = async () => {
-    if (!editingSlug || !editName.trim() || !editSlugVal.trim()) return
+    if (loading || !editingSlug || !editName.trim() || !editSlugVal.trim()) return
+    setLoading(true)
     try {
       const res = await fetch('/api/admin/categories', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldSlug: editingSlug, name: editName.trim(), slug: editSlugVal.trim() }),
+        body: JSON.stringify({ oldSlug: editingSlug, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim() }),
       })
       if (!res.ok) {
         const data = (await res.json()) as { error?: string }
         throw new Error(data.error || '更新失败')
       }
       setCategories((prev) =>
-        prev.map((c) => c.slug === editingSlug ? { ...c, name: editName.trim(), slug: editSlugVal.trim() } : c)
+        prev.map((c) => c.slug === editingSlug ? { ...c, name: editName.trim(), name_en: editNameEn.trim(), slug: editSlugVal.trim() } : c)
       )
       setEditingSlug(null)
       toast.success('分类已更新')
       router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '更新失败')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -127,8 +135,8 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       {/* 添加分类 */}
       <form onSubmit={handleAdd} className="bg-[var(--editor-panel)] rounded-xl border border-[var(--editor-line)] p-5">
         <h2 className="text-sm font-semibold text-[var(--editor-ink)] mb-3">添加分类</h2>
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="min-w-0 flex-1 basis-40">
             <label className="text-xs text-[var(--editor-muted)] mb-1 block">名称</label>
             <input
               type="text"
@@ -138,7 +146,18 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
               className="w-full rounded-lg border border-[var(--editor-line)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)] transition"
             />
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 basis-40">
+            <label htmlFor="category-name-en" className="text-xs text-[var(--editor-muted)] mb-1 block">英文名称（可选）</label>
+            <input
+              id="category-name-en"
+              type="text"
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder="如：AI Tools"
+              className="w-full rounded-lg border border-[var(--editor-line)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)] transition"
+            />
+          </div>
+          <div className="min-w-0 flex-1 basis-40">
             <label className="text-xs text-[var(--editor-muted)] mb-1 block">Slug</label>
             <input
               type="text"
@@ -160,7 +179,8 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       </form>
 
       {/* 分类列表 */}
-      <div className="bg-[var(--editor-panel)] rounded-xl border border-[var(--editor-line)] overflow-hidden">
+      <div className="bg-[var(--editor-panel)] rounded-xl border border-[var(--editor-line)] overflow-x-auto">
+        <div className="min-w-[520px]">
         <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-[var(--editor-line)] bg-[var(--editor-soft)]">
           <span className="text-xs font-semibold text-[var(--editor-muted)] uppercase tracking-wide">名称</span>
           <span className="text-xs font-semibold text-[var(--editor-muted)] uppercase tracking-wide">Slug</span>
@@ -172,12 +192,25 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
             <div key={cat.slug} className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5">
               {editingSlug === cat.slug ? (
                 <>
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="text-sm rounded border border-[var(--editor-line)] bg-[var(--background)] px-2 py-1 text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)]"
-                  />
+                  <div className="min-w-0 space-y-2">
+                    <input
+                      type="text"
+                      aria-label="分类名称"
+                      value={editName}
+                      disabled={loading}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full text-sm rounded border border-[var(--editor-line)] bg-[var(--background)] px-2 py-1 text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)]"
+                    />
+                    <input
+                      type="text"
+                      aria-label="分类英文名称"
+                      placeholder="英文名称（可选）"
+                      value={editNameEn}
+                      disabled={loading}
+                      onChange={(e) => setEditNameEn(e.target.value)}
+                      className="w-full text-sm rounded border border-[var(--editor-line)] bg-[var(--background)] px-2 py-1 text-[var(--editor-ink)] outline-none focus:border-[var(--editor-ink)]"
+                    />
+                  </div>
                   <input
                     type="text"
                     value={editSlugVal}
@@ -186,13 +219,16 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
                   />
                   <span className="text-xs text-[var(--editor-muted)] text-right tabular-nums">{cat.post_count}</span>
                   <div className="flex gap-2">
-                    <button type="button" onClick={handleUpdate} className="text-xs text-emerald-600 hover:underline">保存</button>
-                    <button type="button" onClick={() => setEditingSlug(null)} className="text-xs text-[var(--editor-muted)] hover:underline">取消</button>
+                    <button type="button" disabled={loading || !editName.trim() || !editSlugVal.trim()} onClick={handleUpdate} className="text-xs text-emerald-600 hover:underline disabled:opacity-50">{loading ? '保存中…' : '保存'}</button>
+                    <button type="button" disabled={loading} onClick={() => setEditingSlug(null)} className="text-xs text-[var(--editor-muted)] hover:underline">取消</button>
                   </div>
                 </>
               ) : (
                 <>
-                  <span className="text-sm font-medium text-[var(--editor-ink)]">{cat.name}</span>
+                  <div className="min-w-0 break-words">
+                    <span className="text-sm font-medium text-[var(--editor-ink)]">{cat.name}</span>
+                    {cat.name_en && <div className="mt-0.5 text-xs text-[var(--editor-muted)]">{cat.name_en}</div>}
+                  </div>
                   <span className="text-xs text-[var(--editor-muted)] font-mono">{cat.slug}</span>
                   <span className="text-xs text-[var(--editor-muted)] text-right tabular-nums">{cat.post_count}</span>
                   <div className="flex gap-2">
@@ -206,6 +242,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
           {categories.length === 0 && (
             <div className="px-5 py-8 text-center text-sm text-[var(--editor-muted)]">暂无分类</div>
           )}
+        </div>
         </div>
       </div>
 

@@ -17,6 +17,8 @@ import {
   PanelRightClose,
   ImageIcon,
   WandSparkles,
+  Languages,
+  MoreHorizontal,
   X,
 } from 'lucide-react'
 import {
@@ -66,9 +68,11 @@ import { resolvePostCoverImage } from '@/lib/default-cover-images'
 import { buildAutoDescription, normalizePostSlug, sanitizePostSlugInput } from '@/lib/post-utils'
 import { getSiteDisplayUrl } from '@/lib/site-config'
 import { resizeTextareaHeight, useAutoResizeTextarea } from '@/lib/textarea-autosize'
+import { getPostPath, normalizeLanguage, type Language } from '@/lib/i18n'
+import { PostTranslationsManager } from '@/components/PostTranslationsManager'
 
 type SaveFeedback =
-  | { type: 'success' | 'error'; message: string; slug?: string }
+  | { type: 'success' | 'error'; message: string; slug?: string; language?: Language }
   | null
 
 type PublishStatus = 'public' | 'draft' | 'encrypted' | 'unlisted'
@@ -98,6 +102,7 @@ function relativeTime(ts: number): string {
 
 interface NovelEditorProps {
   initialData?: {
+    id?: number
     slug: string
     title: string
     html: string
@@ -108,7 +113,11 @@ interface NovelEditorProps {
     tags?: string[]
     description?: string | null
     cover_image?: string | null
+    language?: Language
+    translation_group_id?: string | null
+    updated_at?: number
   }
+  skipDraftRestore?: boolean
 }
 
 type DraftMetaState = {
@@ -118,11 +127,12 @@ type DraftMetaState = {
   tags: string[]
   description: string
   coverImage: string
+  language: Language
 }
 
 type MetaGenerationTarget = 'summary' | 'tags' | 'slug' | 'cover'
 
-export function NovelEditor({ initialData }: NovelEditorProps = {}) {
+export function NovelEditor({ initialData, skipDraftRestore = false }: NovelEditorProps = {}) {
   // ── Core state ──
   const [draftReady, setDraftReady] = useState(false)
   const [initialContent, setInitialContent] = useState<JSONContent>(EMPTY_DOCUMENT)
@@ -145,6 +155,12 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
   const [description, setDescription] = useState(initialData?.description || '')
   const [coverImage, setCoverImage] = useState(initialData?.cover_image || '')
   const [slug, setSlug] = useState(initialData?.slug || '')
+  const [language, setLanguage] = useState<Language>(normalizeLanguage(initialData?.language))
+  const [persistedStatus, setPersistedStatus] = useState(initialData?.status || 'draft')
+  const [pairing, setPairing] = useState({ paired: Boolean(initialData?.translation_group_id), ready: !initialData?.slug })
+  const [editorLocked, setEditorLocked] = useState(false)
+  const [savedLanguage, setSavedLanguage] = useState<Language>(normalizeLanguage(initialData?.language))
+  const persistedPrivacyRef = useRef({ password: initialData?.password || null, is_hidden: initialData?.is_hidden || 0 })
 
   // ── UI state ──
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -168,6 +184,13 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
   const draftSaveTimerRef = useRef<number | null>(null)
   const retrySaveTimerRef = useRef<number | null>(null)
   const autosaveAbortRef = useRef<AbortController | null>(null)
+  const autosavePromiseRef = useRef<Promise<boolean> | null>(null)
+  const editorActionLockRef = useRef(false)
+  const explicitSaveRef = useRef(false)
+  const draftRevisionRef = useRef(0)
+  const restoredHtmlRef = useRef(initialData?.html || '')
+  const restoredDraftRef = useRef(false)
+  const localDraftKeyRef = useRef(`qmblog:editor-draft:${initialData?.slug || 'new'}`)
   const autosaveSeqRef = useRef(0)
   const lastAutosaveSnapshotRef = useRef<string | null>(null)
   const skipNextEditorUpdateRef = useRef(Boolean(initialData?.html))
@@ -179,6 +202,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     tags: initialData?.tags || [],
     description: initialData?.description || '',
     coverImage: initialData?.cover_image || '',
+    language: normalizeLanguage(initialData?.language),
   })
 
   // ── Init ──
@@ -190,6 +214,37 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     } else {
       // 新文章，使用空文档
       setInitialContent(EMPTY_DOCUMENT)
+    }
+    try {
+      if (skipDraftRestore && !initialData) window.localStorage.removeItem(localDraftKeyRef.current)
+      const raw = window.localStorage.getItem(localDraftKeyRef.current)
+      const draft = raw ? JSON.parse(raw) : null
+      if (draft && typeof draft.title === 'string' && typeof draft.html === 'string'
+        && typeof draft.savedAt === 'number' && draft.savedAt > (initialData?.updated_at || 0) * 1000) {
+        const meta: DraftMetaState = {
+          editSlug: initialData?.slug || null,
+          slug: typeof draft.slug === 'string' ? draft.slug : initialData?.slug || '',
+          category: typeof draft.category === 'string' ? draft.category : '未分类',
+          tags: Array.isArray(draft.tags) ? draft.tags.filter((tag: unknown) => typeof tag === 'string') : [],
+          description: typeof draft.description === 'string' ? draft.description : '',
+          coverImage: typeof draft.coverImage === 'string' ? draft.coverImage : '',
+          language: initialData?.translation_group_id ? normalizeLanguage(initialData.language) : normalizeLanguage(draft.language),
+        }
+        latestTitleRef.current = draft.title
+        restoredHtmlRef.current = draft.html
+        restoredDraftRef.current = true
+        latestMetaRef.current = meta
+        setTitle(draft.title)
+        setSlug(meta.slug)
+        setCategory(meta.category)
+        setTags(meta.tags)
+        setDescription(meta.description)
+        setCoverImage(meta.coverImage)
+        setLanguage(meta.language)
+        setSaveState('dirty')
+      }
+    } catch {
+      // Browser storage can be unavailable; server saving remains usable.
     }
     setDraftReady(true)
 
@@ -207,6 +262,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
   }, [sidebarOpen])
 
   useEffect(() => {
+    if (!draftReady) return
     latestMetaRef.current = {
       editSlug,
       slug,
@@ -214,14 +270,15 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       tags,
       description,
       coverImage,
+      language,
     }
-  }, [editSlug, slug, category, tags, description, coverImage])
+  }, [draftReady, editSlug, slug, category, tags, description, coverImage, language])
 
   // Relative time ticker
   useEffect(() => {
     const id = window.setInterval(() => setTick(t => t + 1), 30000)
     return () => clearInterval(id)
-  }, [title])
+  }, [])
 
   // Cleanup timers
   useEffect(() => {
@@ -230,7 +287,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       if (retrySaveTimerRef.current !== null) window.clearTimeout(retrySaveTimerRef.current)
       autosaveAbortRef.current?.abort()
     }
-  }, [title])
+  }, [])
 
   // Auto-focus title on new post
   useEffect(() => {
@@ -256,7 +313,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
-        handleSave()
+        void handleSave()
       }
       if (e.key === 'Escape') {
         setPublishPanelOpen(false)
@@ -327,6 +384,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     category: string
     tags: string[]
     coverImage: string
+    language: Language
   }) => {
     return JSON.stringify({
       currentSlug: payload.currentSlug,
@@ -337,6 +395,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       category: payload.category,
       tags: payload.tags,
       coverImage: payload.coverImage,
+      language: payload.language,
     })
   }, [])
 
@@ -351,18 +410,30 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     }
   }, [])
 
-  const abortAutosaveRequest = useCallback(() => {
-    autosaveAbortRef.current?.abort()
-    autosaveAbortRef.current = null
+  const storeLocalDraft = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor || editorActionLockRef.current) return
+    try {
+      window.localStorage.setItem(localDraftKeyRef.current, JSON.stringify({
+        ...latestMetaRef.current, title: latestTitleRef.current, html: editor.getHTML(), savedAt: Date.now(),
+      }))
+    } catch {
+      // Continue with remote saving if local storage is full or disabled.
+    }
+  }, [])
+
+  const clearLocalDraft = useCallback(() => {
+    try { window.localStorage.removeItem(localDraftKeyRef.current) } catch {}
   }, [])
 
   const syncPersistedSlug = useCallback((
     persistedSlug: string,
     previousSlug: string | null,
     forceVisibleSync = false,
+    submittedSlug?: string,
   ) => {
     const shouldSyncVisibleSlug = forceVisibleSync
-      || !slugInputFocusedRef.current
+      || (submittedSlug === undefined ? !slugInputFocusedRef.current : latestMetaRef.current.slug === submittedSlug)
       || latestMetaRef.current.slug === persistedSlug
 
     latestMetaRef.current = {
@@ -377,18 +448,29 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     }
 
     if (persistedSlug !== previousSlug) {
+      const nextKey = `qmblog:editor-draft:${persistedSlug}`
+      try {
+        const localDraft = window.localStorage.getItem(localDraftKeyRef.current)
+        if (localDraft) {
+          window.localStorage.setItem(nextKey, localDraft)
+          window.localStorage.removeItem(localDraftKeyRef.current)
+        }
+      } catch {}
+      localDraftKeyRef.current = nextKey
       window.history.replaceState({}, '', `/editor?edit=${encodeURIComponent(persistedSlug)}`)
     }
   }, [])
 
   const persistDraft = useCallback(async (
-    nextTitle = latestTitleRef.current,
-    editor = editorRef.current,
     retryAttempt = 0,
-  ) => {
-    if (typeof window === 'undefined' || !draftReady || !editor) return
+  ): Promise<boolean> => {
+    // Serialize saves so a pending POST cannot create a second local draft.
+    while (autosavePromiseRef.current) await autosavePromiseRef.current
+    const editor = editorRef.current
+    if (typeof window === 'undefined' || !draftReady || !editor) return false
 
-    const { editSlug: currentSlug, slug: nextSlugRaw, category, tags, description, coverImage } = latestMetaRef.current
+    const nextTitle = latestTitleRef.current
+    const { editSlug: currentSlug, slug: nextSlugRaw, category, tags, description, coverImage, language } = latestMetaRef.current
     const nextSlug = normalizePostSlug(nextSlugRaw)
     const normalizedTitle = nextTitle.trim() || '无标题'
     const contentJson = editor.getJSON()
@@ -399,7 +481,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
 
     if (!hasMeaningfulContent) {
       setSaveState('saved')
-      return
+      return true
     }
 
     const normalizedDescription = (description || buildAutoDescription(plainText) || '').trim()
@@ -412,122 +494,149 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       category,
       tags,
       coverImage,
+      language,
     })
 
     if (snapshot === lastAutosaveSnapshotRef.current) {
+      clearLocalDraft()
       setSaveState('saved')
-      return
+      return true
     }
 
     const requestId = autosaveSeqRef.current + 1
     autosaveSeqRef.current = requestId
 
-    abortAutosaveRequest()
     const controller = new AbortController()
     autosaveAbortRef.current = controller
+    const revision = draftRevisionRef.current
 
     setSaveState('saving')
 
+    const operation = (async () => {
+      try {
+        if (currentSlug) {
+          const res = await fetch('/api/posts', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              current_slug: currentSlug,
+              new_slug: nextSlug && nextSlug !== currentSlug ? nextSlug : undefined,
+              title: normalizedTitle,
+              html,
+              content: plainText || JSON.stringify(contentJson),
+              description: normalizedDescription,
+              category,
+              tags,
+              cover_image: coverImage,
+              language,
+            }),
+            signal: controller.signal,
+          })
+
+          const data = await res.json().catch(() => ({})) as { error?: string; slug?: string }
+          if (!res.ok) {
+            throw new Error(data.error || '自动保存失败')
+          }
+
+          if (requestId !== autosaveSeqRef.current) return false
+
+          const persistedSlug = typeof data.slug === 'string' ? data.slug : currentSlug
+          if (persistedSlug !== currentSlug || latestMetaRef.current.slug !== persistedSlug) {
+            syncPersistedSlug(persistedSlug, currentSlug, false, nextSlugRaw)
+          }
+        } else {
+          const res = await fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: normalizedTitle,
+              html,
+              content: plainText || JSON.stringify(contentJson),
+              category,
+              slug: nextSlug || undefined,
+              language,
+              status: 'draft',
+              tags,
+              description: normalizedDescription,
+              cover_image: coverImage,
+            }),
+            signal: controller.signal,
+          })
+
+          const data = await res.json().catch(() => ({})) as { error?: string; slug?: string }
+          if (!res.ok) {
+            throw new Error(data.error || '自动保存失败')
+          }
+
+          if (requestId !== autosaveSeqRef.current) return false
+
+          if (typeof data.slug === 'string' && data.slug) {
+            syncPersistedSlug(data.slug, null, false, nextSlugRaw)
+          } else {
+            throw new Error('未收到已保存的文章地址，请重试')
+          }
+        }
+
+        if (requestId !== autosaveSeqRef.current) return false
+
+        lastAutosaveSnapshotRef.current = buildAutosaveSnapshot({
+          currentSlug: latestMetaRef.current.editSlug,
+          nextSlug: latestMetaRef.current.editSlug || '',
+          title: normalizedTitle, html, description: normalizedDescription, category, tags, coverImage, language,
+        })
+        setSavedLanguage(language)
+        if (revision === draftRevisionRef.current) {
+          clearLocalDraft()
+          setSaveState('saved')
+        } else {
+          setSaveState('dirty')
+        }
+        setLastSavedAt(Date.now())
+        return true
+      } catch (error) {
+        if (controller.signal.aborted || requestId !== autosaveSeqRef.current) return false
+
+        console.error('Auto-save failed:', error)
+        setSaveState('error')
+        setFeedback({ type: 'error', message: error instanceof Error ? error.message : '自动保存失败，请重试。' })
+
+        const nextAttempt = retryAttempt + 1
+        const delay = Math.min(AUTOSAVE_MAX_RETRY_DELAY_MS, 2000 * (2 ** retryAttempt))
+        if (!editorActionLockRef.current && !explicitSaveRef.current) {
+          retrySaveTimerRef.current = window.setTimeout(() => { void persistDraft(nextAttempt) }, delay)
+        }
+        return false
+      } finally {
+        if (autosaveAbortRef.current === controller) {
+          autosaveAbortRef.current = null
+        }
+      }
+    })()
+    autosavePromiseRef.current = operation
     try {
-      if (currentSlug) {
-        const res = await fetch('/api/posts', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            current_slug: currentSlug,
-            new_slug: nextSlug && nextSlug !== currentSlug ? nextSlug : undefined,
-            title: normalizedTitle,
-            html,
-            content: plainText || JSON.stringify(contentJson),
-            description: normalizedDescription,
-            category,
-            tags,
-            cover_image: coverImage,
-          }),
-          signal: controller.signal,
-        })
-
-        const data = await res.json().catch(() => ({})) as { error?: string; slug?: string }
-        if (!res.ok) {
-          throw new Error(data.error || '自动保存失败')
-        }
-
-        if (requestId !== autosaveSeqRef.current) return
-
-        const persistedSlug = typeof data.slug === 'string' ? data.slug : currentSlug
-        if (persistedSlug !== currentSlug || latestMetaRef.current.slug !== persistedSlug) {
-          syncPersistedSlug(persistedSlug, currentSlug)
-        }
-      } else {
-        const res = await fetch('/api/posts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: normalizedTitle,
-            html,
-            content: plainText || JSON.stringify(contentJson),
-            category,
-            status: 'draft',
-            tags,
-            description: normalizedDescription,
-            cover_image: coverImage,
-          }),
-          signal: controller.signal,
-        })
-
-        const data = await res.json().catch(() => ({})) as { error?: string; slug?: string }
-        if (!res.ok) {
-          throw new Error(data.error || '自动保存失败')
-        }
-
-        if (requestId !== autosaveSeqRef.current) return
-
-        if (typeof data.slug === 'string' && data.slug) {
-          syncPersistedSlug(data.slug, null, true)
-        }
-      }
-
-      if (requestId !== autosaveSeqRef.current) return
-
-      lastAutosaveSnapshotRef.current = snapshot
-      setSaveState('saved')
-      setLastSavedAt(Date.now())
-    } catch (error) {
-      if (controller.signal.aborted) return
-      if (requestId !== autosaveSeqRef.current) return
-
-      console.error('Auto-save failed:', error)
-      setSaveState('error')
-
-      const nextAttempt = retryAttempt + 1
-      const delay = Math.min(AUTOSAVE_MAX_RETRY_DELAY_MS, 2000 * (2 ** retryAttempt))
-      retrySaveTimerRef.current = window.setTimeout(() => {
-        if (editorRef.current) {
-          void persistDraft(latestTitleRef.current, editorRef.current, nextAttempt)
-        }
-      }, delay)
+      return await operation
     } finally {
-      if (autosaveAbortRef.current === controller) {
-        autosaveAbortRef.current = null
-      }
+      if (autosavePromiseRef.current === operation) autosavePromiseRef.current = null
     }
-  }, [abortAutosaveRequest, buildAutosaveSnapshot, draftReady, syncPersistedSlug])
+  }, [buildAutosaveSnapshot, clearLocalDraft, draftReady, syncPersistedSlug])
 
   // ── Draft save ──
   const scheduleDraftSave = useCallback((
     nextTitle = latestTitleRef.current,
     editor = editorRef.current,
   ) => {
-    if (typeof window === 'undefined' || !draftReady || !editor) return
+    if (typeof window === 'undefined' || !draftReady || !editor || editorActionLockRef.current) return
 
     latestTitleRef.current = nextTitle
+    draftRevisionRef.current += 1
+    storeLocalDraft()
     clearAutosaveTimers()
     setSaveState((prev) => (prev === 'saving' ? prev : 'dirty'))
 
     draftSaveTimerRef.current = window.setTimeout(() => {
-      void persistDraft(nextTitle, editor)
+      if (!explicitSaveRef.current) void persistDraft()
     }, AUTOSAVE_DEBOUNCE_MS)
-  }, [clearAutosaveTimers, draftReady, persistDraft])
+  }, [clearAutosaveTimers, draftReady, persistDraft, storeLocalDraft])
 
   const markDirty = useCallback((metaOverrides?: Partial<DraftMetaState>) => {
     if (metaOverrides && Object.keys(metaOverrides).length > 0) {
@@ -538,6 +647,45 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     }
     scheduleDraftSave()
   }, [scheduleDraftSave])
+
+  const finishTranslationAction = useCallback(() => {
+    editorActionLockRef.current = false
+    setEditorLocked(false)
+    editorRef.current?.setEditable(true)
+  }, [])
+
+  const prepareTranslationAction = useCallback(async () => {
+    if (editorActionLockRef.current || explicitSaveRef.current) throw new Error('请等待当前保存完成')
+    if (uploadingImage || pendingMetadataTargets.length) throw new Error('请等待图片上传或 AI 生成完成')
+    editorActionLockRef.current = true
+    setEditorLocked(true)
+    editorRef.current?.setEditable(false)
+    clearAutosaveTimers()
+    try {
+      while (autosavePromiseRef.current) await autosavePromiseRef.current
+      if (!await persistDraft()) throw new Error('原稿尚未保存成功，请重试后再管理译文')
+      clearAutosaveTimers()
+      const savedSlug = latestMetaRef.current.editSlug
+      if (!savedSlug) throw new Error('先填写标题或正文并保存文章')
+      return savedSlug
+    } catch (error) {
+      finishTranslationAction()
+      throw error
+    }
+  }, [clearAutosaveTimers, finishTranslationAction, pendingMetadataTargets.length, persistDraft, uploadingImage])
+
+  const handlePairingChange = useCallback((paired: boolean, ready: boolean) => {
+    setPairing({ paired, ready })
+  }, [])
+
+  const reloadStoredTranslation = useCallback(() => {
+    // Never flush the old editor after AI has replaced the stored draft.
+    editorActionLockRef.current = true
+    clearAutosaveTimers()
+    clearLocalDraft()
+    const savedSlug = latestMetaRef.current.editSlug
+    if (savedSlug) window.location.replace(`/editor?edit=${encodeURIComponent(savedSlug)}`)
+  }, [clearAutosaveTimers, clearLocalDraft])
 
   const imageExtensions = useMemo(() => createEditorExtensions({
     imageActions: {
@@ -676,6 +824,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             description,
             tags,
             currentSlug: normalizePostSlug(slug) || editSlug || '',
+            language,
           }),
         })
 
@@ -746,10 +895,11 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
   }
 
   // ── Save ──
-  const handleSave = async () => {
+  const handleSave = async (statusOverride?: PublishStatus) => {
+    if (editorActionLockRef.current || explicitSaveRef.current) return
+    if (persistedStatus === 'deleted') { setFeedback({ type: 'error', message: '请先在文章列表恢复这篇文章。' }); return }
     const editor = editorRef.current
-    const normalizedTitle = title.trim()
-    const normalizedSlug = normalizePostSlug(slug)
+    const normalizedTitle = latestTitleRef.current.trim()
     if (!normalizedTitle) { setFeedback({ type: 'error', message: '先把文章标题写上。' }); return }
     if (!editor) { setFeedback({ type: 'error', message: '编辑器还没准备好。' }); return }
     const content = editor.getText({ blockSeparator: '\n\n' }).trim()
@@ -759,29 +909,42 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
     const normalizedDescription = (description || buildAutoDescription(content) || '').trim()
 
     clearAutosaveTimers()
-    abortAutosaveRequest()
+    explicitSaveRef.current = true
+    editorActionLockRef.current = true
+    setEditorLocked(true)
+    editor.setEditable(false)
 
     setSaving(true); setSaveState('saving'); setFeedback(null)
 
     try {
-      const isEdit = editSlug !== null
-      const url = isEdit ? `/api/admin/posts/${editSlug}` : '/api/posts'
+      while (autosavePromiseRef.current) await autosavePromiseRef.current
+      clearAutosaveTimers()
+      setSaveState('saving')
+      const meta = latestMetaRef.current
+      const currentSlug = meta.editSlug
+      const normalizedSlug = normalizePostSlug(meta.slug)
+      const isEdit = currentSlug !== null
+      const selectedStatus = statusOverride || publishStatus
+      const url = isEdit ? `/api/admin/posts/${encodeURIComponent(currentSlug)}` : '/api/posts'
       const method = isEdit ? 'PUT' : 'POST'
 
       let statusFields: { status: string; is_hidden: number; password?: string | null }
-      if (publishStatus === 'encrypted') {
-        statusFields = { status: 'published', is_hidden: 0, password: initialData?.password || generatePassword() }
+      if (selectedStatus === 'draft') {
+        statusFields = { status: 'draft', ...persistedPrivacyRef.current }
+      } else if (selectedStatus === 'encrypted') {
+        statusFields = { status: 'published', is_hidden: 0, password: persistedPrivacyRef.current.password || generatePassword() }
       } else {
-        const m = { public: { status: 'published', is_hidden: 0, password: null }, draft: { status: 'draft', is_hidden: 0, password: null }, unlisted: { status: 'published', is_hidden: 1, password: null } }
-        statusFields = m[publishStatus as 'public' | 'draft' | 'unlisted']
+        const m = { public: { status: 'published', is_hidden: 0, password: null }, unlisted: { status: 'published', is_hidden: 1, password: null } }
+        statusFields = m[selectedStatus]
       }
 
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slug: normalizedSlug || (isEdit ? editSlug : undefined),
+          slug: normalizedSlug || (isEdit ? currentSlug : undefined),
           title: normalizedTitle, content, html, category,
+          language: meta.language,
           ...statusFields,
           tags, description: normalizedDescription, cover_image: coverImage || null,
         }),
@@ -795,7 +958,8 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
 
       const persistedSlug: string | null = typeof result.slug === 'string'
         ? result.slug
-        : (isEdit ? editSlug : null)
+        : currentSlug
+      if (!persistedSlug) throw new Error('未收到已保存的文章地址，请重试')
       const snapshot = buildAutosaveSnapshot({
         currentSlug: persistedSlug,
         nextSlug: persistedSlug || '',
@@ -805,30 +969,33 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
         category,
         tags,
         coverImage,
+        language: meta.language,
       })
       lastAutosaveSnapshotRef.current = snapshot
 
       setSaveState('saved')
       setLastSavedAt(Date.now())
+      clearLocalDraft()
+      setPersistedStatus(statusFields.status as 'draft' | 'published')
+      setSavedLanguage(meta.language)
+      persistedPrivacyRef.current = { password: statusFields.password || null, is_hidden: statusFields.is_hidden }
+      setPublishStatus(selectedStatus)
 
       if (isEdit) {
         if (!description && normalizedDescription) {
           setDescription(normalizedDescription)
         }
         if (persistedSlug) {
-          syncPersistedSlug(persistedSlug, editSlug, true)
+          syncPersistedSlug(persistedSlug, currentSlug, true)
         }
-        setFeedback({ type: 'success', message: '文章已更新。', slug: persistedSlug || editSlug || undefined })
+        setFeedback({ type: 'success', message: '文章已更新。', slug: persistedSlug, language: meta.language })
       } else {
         if (!description && normalizedDescription) {
           setDescription(normalizedDescription)
         }
         const msgs = { public: '已发布', draft: '草稿已保存', encrypted: '已发布（加密）', unlisted: '已发布（链接访问）' }
-        setFeedback({ type: 'success', message: `${msgs[publishStatus]}`, slug: result.slug })
-        setTitle('')
-        latestTitleRef.current = ''
-        lastAutosaveSnapshotRef.current = null
-        editor.commands.clearContent()
+        syncPersistedSlug(persistedSlug, null, true)
+        setFeedback({ type: 'success', message: msgs[selectedStatus], slug: persistedSlug, language: meta.language })
       }
       setPublishPanelOpen(false)
     } catch (error) {
@@ -836,6 +1003,8 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       setFeedback({ type: 'error', message: error instanceof Error ? error.message : '保存失败' })
     } finally {
       setSaving(false)
+      explicitSaveRef.current = false
+      finishTranslationAction()
     }
   }
 
@@ -955,11 +1124,12 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
   const showSidebar = sidebarOpen
   const wechatSourceUrl = useMemo(() => {
     const currentSlug = normalizePostSlug(editSlug || slug)
-    return currentSlug ? `https://${SITE_DISPLAY_URL}/${currentSlug}` : ''
-  }, [editSlug, slug])
+    return currentSlug ? `https://${SITE_DISPLAY_URL}${getPostPath(currentSlug, language)}` : ''
+  }, [editSlug, slug, language])
 
   return (
     <div className="min-h-screen bg-[var(--editor-app-bg)]">
+      <fieldset disabled={editorLocked} className="contents">
       {/* ── Sticky Header ── */}
       <header className="sticky top-0 z-40 h-14 border-b border-[var(--editor-line)] bg-[color-mix(in_srgb,var(--background)_90%,transparent)] backdrop-blur-lg">
         <div className="flex h-full items-center gap-2 px-4">
@@ -976,7 +1146,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
 
           {/* Center: Save status + Word count */}
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className={`flex items-center gap-1.5 text-sm min-w-[140px] ${saveStatusColor}`}>
+            <div className={`flex items-center gap-1.5 text-sm min-w-0 sm:min-w-[140px] ${saveStatusColor}`}>
               <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${
                 saveState === 'saved' ? 'bg-emerald-500' :
                 saveState === 'dirty' ? 'bg-gray-300' :
@@ -987,8 +1157,8 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
 
             {charCount > 0 && (
               <>
-                <div className="hidden sm:block h-4 w-px bg-[var(--editor-line)]" />
-                <div className="hidden sm:flex items-center gap-2">
+                <div className="hidden xl:block h-4 w-px bg-[var(--editor-line)]" />
+                <div className="hidden xl:flex items-center gap-2">
                   <span className="text-sm text-[var(--stone-gray)] whitespace-nowrap tabular-nums">
                     {charCount.toLocaleString()} 字 · {calcReadTime(charCount)}
                   </span>
@@ -1008,11 +1178,31 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
           )}
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
+            <details className="relative lg:hidden">
+              <summary title="更多工具" aria-label="更多工具" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)]">
+                <MoreHorizontal className="h-4 w-4" />
+              </summary>
+              <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-[var(--editor-line)] bg-[var(--editor-panel)] p-1 shadow-lg">
+                {[
+                  { label: '复制公众号格式', Icon: Copy, action: handleCopyWechat },
+                  { label: '发布到公众号', Icon: Send, action: handleOpenWechatPublish },
+                  { label: '下载 PDF', Icon: FileDown, action: handleDownloadPdf },
+                  { label: 'Ask AI', Icon: WandSparkles, action: (element: HTMLButtonElement) => openDocumentAIModal(element) },
+                  { label: '生成图片', Icon: ImageIcon, action: openDocumentImageModal },
+                ].map(({ label, Icon, action }) => (
+                  <button key={label} type="button" className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-[var(--editor-ink)] hover:bg-[var(--editor-soft)]" onClick={(event) => {
+                    const details = event.currentTarget.closest('details')
+                    if (details) details.open = false
+                    void action(event.currentTarget)
+                  }}><Icon className="h-4 w-4" />{label}</button>
+                ))}
+              </div>
+            </details>
             <button
               type="button"
               onClick={handleCopyWechat}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
               title="复制公众号格式"
             >
               <Copy className="h-4 w-4" />
@@ -1021,7 +1211,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             <button
               type="button"
               onClick={handleOpenWechatPublish}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
               title="发布到公众号"
             >
               <Send className="h-4 w-4" />
@@ -1030,7 +1220,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             <button
               type="button"
               onClick={handleDownloadPdf}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
               title="下载 PDF"
             >
               <FileDown className="h-4 w-4" />
@@ -1039,7 +1229,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             <button
               type="button"
               onClick={(e) => openDocumentAIModal(e.currentTarget)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
               title="Ask AI（基于标题和正文）"
             >
               <WandSparkles className="h-4 w-4" />
@@ -1048,7 +1238,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             <button
               type="button"
               onClick={openDocumentImageModal}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
+              className="hidden lg:inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--editor-muted)] hover:bg-[var(--editor-soft)] hover:text-[var(--editor-accent)] transition"
               title="生成图片"
             >
               <ImageIcon className="h-4 w-4" />
@@ -1067,16 +1257,16 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             <div className="mx-0.5 h-5 w-px bg-[var(--editor-line)]" />
 
             {/* Category selector */}
-            <CategorySelector value={category} onChange={(val) => { setCategory(val); markDirty({ category: val }) }} />
+            <div className="hidden md:block"><CategorySelector value={category} onChange={(val) => { setCategory(val); markDirty({ category: val }) }} /></div>
 
             {/* Publish button + dropdown */}
             <div className="relative" ref={publishPanelRef}>
               <div className="inline-flex">
                 <button
                   type="button"
-                  onClick={handleSave}
-                  disabled={saving || uploadingImage}
-                  className="inline-flex items-center gap-1.5 rounded-l-lg bg-[var(--editor-accent)] pl-3 pr-2 py-1.5 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-60"
+                  onClick={() => void handleSave()}
+                  disabled={saving || uploadingImage || persistedStatus === 'deleted'}
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-l-lg bg-[var(--editor-accent)] pl-3 pr-2 py-1.5 text-sm font-semibold text-white transition hover:brightness-105 disabled:opacity-60"
                 >
                   <Globe className="h-3.5 w-3.5" />
                   {saving ? '保存中…' : editSlug ? '更新' : '发布'}
@@ -1084,6 +1274,8 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
                 <button
                   type="button"
                   onClick={() => setPublishPanelOpen(!publishPanelOpen)}
+                  title="发布设置"
+                  aria-label="发布设置"
                   className="inline-flex items-center rounded-r-lg bg-[var(--editor-accent)] px-1.5 py-1.5 text-white border-l border-white/25 hover:brightness-105 transition"
                 >
                   <ChevronUp className={`h-3.5 w-3.5 transition-transform ${publishPanelOpen ? 'rotate-180' : ''}`} />
@@ -1092,7 +1284,28 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
 
               {/* Publish panel dropdown */}
               {publishPanelOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[var(--editor-line)] bg-[var(--editor-panel)] shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--editor-line)] bg-[var(--editor-panel)] shadow-xl z-50 overflow-hidden">
+                  <div className="border-b border-[var(--editor-line)] px-4 py-3 space-y-2">
+                    <label htmlFor="post-language" className="block text-xs font-semibold text-[var(--editor-muted)]">文章语言</label>
+                    <select
+                      id="post-language"
+                      value={language}
+                      disabled={pairing.paired || !pairing.ready || saving}
+                      onChange={(event) => {
+                        const nextLanguage = normalizeLanguage(event.target.value)
+                        setLanguage(nextLanguage)
+                        markDirty({ language: nextLanguage })
+                      }}
+                      className="w-full rounded-md border border-[var(--editor-line)] bg-[var(--editor-panel)] px-2.5 py-1.5 text-sm text-[var(--editor-ink)] disabled:opacity-50"
+                    >
+                      <option value="zh-CN">中文</option>
+                      <option value="en">English</option>
+                    </select>
+                    {pairing.paired && <p className="text-xs text-[var(--editor-muted)]">请先解除译文关联，再修改语言。</p>}
+                    <button type="button" onClick={() => { setSidebarOpen(true); setPublishPanelOpen(false) }} className="inline-flex items-center gap-1.5 text-xs text-[var(--editor-accent)]">
+                      <Languages className="h-3.5 w-3.5" />管理译文
+                    </button>
+                  </div>
                   <div className="px-4 pt-3 pb-2 text-xs font-semibold text-[var(--editor-muted)] uppercase tracking-wider">选择发布状态</div>
                   {STATUS_CONFIG.map(({ key, label, desc, Icon }) => {
                     const active = publishStatus === key
@@ -1117,16 +1330,16 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => { setPublishStatus('draft'); handleSave() }}
-                        disabled={saving}
+                        onClick={() => void handleSave('draft')}
+                        disabled={saving || persistedStatus === 'deleted'}
                         className="px-3 py-1.5 text-sm text-[var(--editor-ink)] border border-[var(--editor-line)] rounded-lg hover:bg-[var(--editor-soft)] transition disabled:opacity-50"
                       >
                         保存草稿
                       </button>
                       <button
                         type="button"
-                        onClick={handleSave}
-                        disabled={saving}
+                        onClick={() => void handleSave()}
+                        disabled={saving || persistedStatus === 'deleted'}
                         className="px-3 py-1.5 text-sm font-semibold text-white bg-[var(--editor-accent)] rounded-lg hover:brightness-105 transition disabled:opacity-50"
                       >
                         {saving ? '保存中…' : editSlug ? '更新文章' : '发布'}
@@ -1147,13 +1360,14 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
             }`}>
               <span>{feedback.message}</span>
               {feedback.slug && (
-                <a href={`/${feedback.slug}`} className="font-medium underline underline-offset-2">打开文章</a>
+                <a href={getPostPath(feedback.slug, feedback.language || language)} className="font-medium underline underline-offset-2">打开文章</a>
               )}
               <button type="button" onClick={() => setFeedback(null)} className="ml-auto"><X className="h-3.5 w-3.5" /></button>
             </div>
           </div>
         )}
       </header>
+      </fieldset>
 
       {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => { void handleSelectedFiles(e.target.files) }} />
@@ -1164,6 +1378,7 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
       <div className="flex">
         {/* Main editor area */}
         <main className="flex-1 min-w-0">
+          <fieldset disabled={editorLocked} className="min-w-0">
           <div className="mx-auto max-w-4xl px-4 pt-10 pb-8 sm:px-6">
             {/* Title input */}
             <div className="pb-4">
@@ -1221,9 +1436,9 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       const st = editor.storage as any
                       setCharCount(st.characterCount?.characters?.() ?? 0)
-                      if (initialData?.html) {
+                      if (restoredHtmlRef.current) {
                         skipNextEditorUpdateRef.current = true
-                        editor.commands.setContent(initialData.html)
+                        editor.commands.setContent(restoredHtmlRef.current)
                       } else {
                         skipNextEditorUpdateRef.current = false
                       }
@@ -1238,10 +1453,12 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
                           category: initialData.category || '未分类',
                           tags: initialData.tags || [],
                           coverImage: initialData.cover_image || '',
+                          language: normalizeLanguage(initialData.language),
                         })
                       } else {
                         lastAutosaveSnapshotRef.current = null
                       }
+                      if (restoredDraftRef.current) markDirty()
                     }}
                     onUpdate={({ editor }) => {
                       editorRef.current = editor
@@ -1267,23 +1484,41 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
               </EditorRoot>
             )}
           </div>
+          </fieldset>
         </main>
 
         {/* ── Right Sidebar ── */}
         <aside
-          className={`shrink-0 border-l border-[var(--editor-line)] bg-[var(--background)] overflow-y-auto overflow-x-hidden transition-all duration-200 ease-in-out ${
+          className={`sticky top-14 h-[calc(100vh-3.5rem)] max-sm:fixed max-sm:right-0 max-sm:z-30 shrink-0 border-l border-[var(--editor-line)] bg-[var(--background)] overflow-y-auto overflow-x-hidden transition-all duration-200 ease-in-out ${
             showSidebar ? 'w-[280px]' : 'w-0 border-l-0'
           }`}
-          style={{ position: 'sticky', top: '3.5rem', height: 'calc(100vh - 3.5rem)' }}
         >
-          {showSidebar && (
-            <div className="w-[280px] px-5 py-6 space-y-6">
+            <div className={`w-[280px] px-5 py-6 space-y-6 ${showSidebar ? '' : 'hidden'}`}>
               {/* Close button */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[var(--stone-gray)] uppercase tracking-wider">文章设置</span>
-                <button type="button" onClick={() => setSidebarOpen(false)} className="text-[var(--stone-gray)] hover:text-[var(--editor-ink)]">
+                <button type="button" title="关闭文章设置" aria-label="关闭文章设置" disabled={editorLocked} onClick={() => setSidebarOpen(false)} className="text-[var(--stone-gray)] hover:text-[var(--editor-ink)] disabled:opacity-50">
                   <X className="h-4 w-4" />
                 </button>
+              </div>
+
+              <PostTranslationsManager
+                slug={editSlug}
+                language={language}
+                status={persistedStatus}
+                translationGroupId={initialData?.translation_group_id}
+                refreshKey={savedLanguage}
+                disabled={saving || uploadingImage || pendingMetadataTargets.length > 0}
+                onBeforeAction={prepareTranslationAction}
+                onAfterAction={finishTranslationAction}
+                onPairingChange={handlePairingChange}
+                onApplied={reloadStoredTranslation}
+              />
+
+              <fieldset disabled={editorLocked} className="min-w-0 space-y-6">
+              <div className="space-y-2 md:hidden">
+                <label className="block text-xs font-semibold text-[var(--stone-gray)]">分类</label>
+                <CategorySelector value={category} onChange={(value) => { setCategory(value); markDirty({ category: value }) }} />
               </div>
 
               {/* Tags */}
@@ -1457,12 +1692,12 @@ export function NovelEditor({ initialData }: NovelEditorProps = {}) {
                     className="flex-1 rounded-md border border-[var(--editor-line)] bg-[var(--editor-panel)] px-2 py-1.5 text-sm text-[var(--editor-ink)] outline-none focus:border-[var(--editor-accent)]"
                   />
                 </div>
-                <div className="mt-1 text-[10px] text-[var(--stone-gray)]">
-                  {SITE_DISPLAY_URL}/{normalizePostSlug(slug) || editSlug || '自动生成'}
+                <div className="mt-1 break-all text-[10px] text-[var(--stone-gray)]">
+                  {SITE_DISPLAY_URL}{getPostPath(normalizePostSlug(slug) || editSlug || '自动生成', language)}
                 </div>
               </div>
+              </fieldset>
             </div>
-          )}
         </aside>
       </div>
 

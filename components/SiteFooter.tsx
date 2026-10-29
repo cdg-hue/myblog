@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useState, useRef, useEffect } from 'react'
 import { refreshAdminSession, useAdminSession } from '@/lib/admin-session-client'
+import { usePublicLocale } from '@/components/PublicLocale'
 
 export function SiteFooter() {
+  const { t } = usePublicLocale()
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,7 +62,7 @@ export function SiteFooter() {
                 href="/admin"
                 className="hover:text-[var(--editor-ink)] transition-colors duration-150 underline-offset-2 hover:underline"
               >
-                阿成
+                {t('阿成')}
               </Link>
               <span>·</span>
               <Link
@@ -81,7 +83,7 @@ export function SiteFooter() {
               onClick={() => setOpen(true)}
               className="hover:text-[var(--editor-ink)] transition-colors duration-150 underline-offset-2 hover:underline"
             >
-              阿成
+              {t('阿成')}
             </button>
           )}
         </div>

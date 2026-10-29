@@ -3,6 +3,7 @@ import { invalidatePublicContentCache } from '@/lib/cache'
 import { getPostAiSnapshot, updatePost } from '@/lib/db'
 import { buildAutoDescription } from '@/lib/post-utils'
 import { deletePostFromRelatedIndex, syncPostToRelatedIndex } from '@/lib/related-content'
+import { normalizeLanguage } from '@/lib/i18n'
 
 export type BackgroundJob =
   | {
@@ -53,7 +54,7 @@ async function runProcessPostAiJob(env: BackgroundJobEnv, postId: number) {
   const post = await getPostAiSnapshot(env.DB, postId)
   if (!post || post.deleted_at) return
 
-  const aiResult = await processPost(post.title, post.content, getAiRuntimeEnv(env), 2, env.DB)
+  const aiResult = await processPost(post.title, post.content, getAiRuntimeEnv(env), 2, env.DB, normalizeLanguage(post.language))
   if (!aiResult) return
 
   const updates: Parameters<typeof updatePost>[2] = {}

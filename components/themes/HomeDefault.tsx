@@ -5,14 +5,8 @@ import { SiteHeader } from '@/components/SiteHeader'
 import { SiteFooter } from '@/components/SiteFooter'
 import { Pagination } from '@/components/Pagination'
 import type { HomeProps } from '@/components/HomeClient'
-
-function formatDate(ts: number) {
-  return new Date(ts * 1000).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+import { usePublicLocale } from '@/components/PublicLocale'
+import { formatPublicDate } from '@/lib/public-i18n'
 
 export function HomeDefault({
   initialTheme,
@@ -23,6 +17,7 @@ export function HomeDefault({
   totalPages,
   categorySlugMap,
 }: HomeProps) {
+  const { language, t, path, postPath, categoryName } = usePublicLocale()
   return (
     <div className="min-h-full flex flex-col bg-[var(--background)]">
       <SiteHeader
@@ -33,8 +28,8 @@ export function HomeDefault({
       <main className="flex-1 mx-auto max-w-3xl w-full px-4 sm:px-6 py-10 sm:py-14">
         {posts.length === 0 ? (
           <div className="text-center py-20">
-            <p className="text-[var(--editor-muted)] mb-3">还没有文章</p>
-            <p className="text-sm text-[var(--stone-gray)]">开始写作，记录思考</p>
+            <p className="text-[var(--editor-muted)] mb-3">{t('还没有文章')}</p>
+            <p className="text-sm text-[var(--stone-gray)]">{t('开始写作，记录思考')}</p>
           </div>
         ) : (
           <>
@@ -42,11 +37,10 @@ export function HomeDefault({
               {posts.map((post, index) => (
                 <article
                   key={post.slug}
-                  className="group border-t border-[var(--editor-line)] first:border-t-0"
+                  className="group relative border-t border-[var(--editor-line)] first:border-t-0"
                   style={{ animation: `fadeInUp 0.4s ease-out ${index * 0.05}s both` }}
                 >
-                  <Link
-                    href={`/${post.slug}`}
+                  <div
                     className="block py-6 sm:py-7 transition-all duration-200 hover:bg-[var(--editor-panel)] border-l-2 border-l-transparent hover:border-l-[var(--editor-accent)] pl-4"
                   >
                     <div>
@@ -54,7 +48,7 @@ export function HomeDefault({
                         className="text-xl sm:text-2xl font-bold text-[var(--editor-ink)] leading-snug mb-2 group-hover:text-[var(--editor-accent)] transition-colors duration-200 flex items-center gap-2"
                         style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
                       >
-                        {post.title}
+                        <Link href={postPath(post.slug)} className="after:absolute after:inset-0">{post.title}</Link>
                         {post.password && (
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--editor-muted)] flex-shrink-0">
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -74,7 +68,7 @@ export function HomeDefault({
                         </p>
                       )}
                       <div className="flex items-center gap-2 text-xs text-[var(--stone-gray)]">
-                        <time>{formatDate(post.published_at)}</time>
+                        <time>{formatPublicDate(post.published_at, language)}</time>
                         {post.category && (
                           <>
                             <span aria-hidden>·</span>
@@ -82,14 +76,14 @@ export function HomeDefault({
                               const slug = categorySlugMap[post.category]
                               return slug ? (
                                 <Link
-                                  href={`/category/${slug}`}
-                                  className="px-2 py-0.5 rounded-full bg-[var(--editor-accent)]/8 text-[var(--editor-accent)] font-medium border border-[var(--editor-accent)]/15 hover:bg-[var(--editor-accent)]/12 transition-colors"
+                                  href={path(`/category/${encodeURIComponent(slug)}`)}
+                                  className="relative z-10 px-2 py-0.5 rounded-full bg-[var(--editor-accent)]/8 text-[var(--editor-accent)] font-medium border border-[var(--editor-accent)]/15 hover:bg-[var(--editor-accent)]/12 transition-colors"
                                 >
-                                  {post.category}
+                                  {categoryName(post.category)}
                                 </Link>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-full bg-[var(--editor-accent)]/8 text-[var(--editor-accent)] font-medium border border-[var(--editor-accent)]/15">
-                                  {post.category}
+                                  {categoryName(post.category)}
                                 </span>
                               )
                             })()}
@@ -97,11 +91,11 @@ export function HomeDefault({
                         )}
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 </article>
               ))}
             </div>
-            <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" />
+            <Pagination currentPage={currentPage} totalPages={totalPages} basePath="/" language={language} />
           </>
         )}
       </main>

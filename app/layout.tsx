@@ -9,6 +9,10 @@ import { getAppCloudflareEnv } from "@/lib/cloudflare";
 import { getSetting } from "@/lib/db";
 import { resolveDefaultSiteCoverImage } from "@/lib/default-cover-images";
 import { getSiteUrl, getSiteUrlObject } from "@/lib/site-config";
+import { headers } from 'next/headers'
+import { LANGUAGE_HEADER, normalizeLanguage } from '@/lib/i18n'
+import { publicMetadata, publicText } from '@/lib/public-i18n'
+import { PublicLocaleProvider } from '@/components/PublicLocale'
 
 const geistSans = localFont({
   src: [
@@ -37,7 +41,7 @@ const geistMono = localFont({
 const SITE_URL = getSiteUrl()
 const DEFAULT_SITE_OG_IMAGE = resolveDefaultSiteCoverImage(SITE_URL)
 
-export const metadata: Metadata = {
+const defaultMetadata: Metadata = {
   metadataBase: getSiteUrlObject(),
   title: {
     default: '阿成',
@@ -86,14 +90,29 @@ export const metadata: Metadata = {
   },
 };
 
+export async function generateMetadata(): Promise<Metadata> {
+  const language = normalizeLanguage((await headers()).get(LANGUAGE_HEADER))
+  const localized = publicMetadata(language, '/')
+  return {
+    ...defaultMetadata,
+    ...localized,
+    title: { default: publicText(language, '阿成'), template: `%s · ${publicText(language, '阿成')}` },
+    // Individual pages own their canonical and available translations.
+    alternates: { types: localized.alternates?.types },
+    openGraph: { ...defaultMetadata.openGraph, ...localized.openGraph },
+    twitter: { ...defaultMetadata.twitter, ...localized.twitter },
+  }
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const language = normalizeLanguage((await headers()).get(LANGUAGE_HEADER))
   let customJs = ''
   let bodyFont = ''
-  let defaultTheme = 'default'
+  let defaultTheme = normalizeTheme(null)
   try {
     const env = await getAppCloudflareEnv()
     if (env?.DB) {
@@ -155,7 +174,7 @@ export default async function RootLayout({
 
   return (
     <html
-      lang="zh-CN"
+      lang={language}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       data-font={bodyFont || 'default'}
       data-theme={defaultTheme !== 'default' ? defaultTheme : undefined}
@@ -170,8 +189,10 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <ToastProvider>
-          <GlobalShortcuts />
-          {children}
+          <PublicLocaleProvider language={language}>
+            <GlobalShortcuts />
+            {children}
+          </PublicLocaleProvider>
         </ToastProvider>
         {customJs && <CustomJsInjector code={customJs} />}
       </body>

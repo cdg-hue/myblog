@@ -7,6 +7,7 @@ import { Dropdown } from '@/components/Dropdown'
 interface FilterBarProps {
   currentStatus?: string
   currentCategory?: string
+  currentLanguage?: string
   categories: string[]
   initialQuery?: string
   counts: {
@@ -24,6 +25,7 @@ interface FilterBarProps {
 export function FilterBar({
   currentStatus,
   currentCategory,
+  currentLanguage,
   categories,
   initialQuery = '',
   counts,
@@ -71,7 +73,8 @@ export function FilterBar({
 
   const activeStatus = currentStatus || 'all'
   const activeCategory = currentCategory || 'all'
-  const hasActiveFilters = Boolean(query.trim() || activeStatus !== 'all' || activeCategory !== 'all')
+  const activeLanguage = currentLanguage || 'all'
+  const hasActiveFilters = Boolean(query.trim() || activeStatus !== 'all' || activeCategory !== 'all' || activeLanguage !== 'all')
 
   const categoryOptions = [
     { value: 'all', label: '全部分类' },
@@ -131,8 +134,21 @@ export function FilterBar({
             </div>
           </form>
 
-          <div className="flex items-center gap-3">
-            <div className="min-w-[160px]">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-[var(--editor-muted)]">
+              语言
+              <select
+                aria-label="筛选文章语言"
+                value={activeLanguage}
+                onChange={(e) => updateFilter('language', e.target.value)}
+                className="rounded-lg border border-[var(--editor-line)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--editor-ink)]"
+              >
+                <option value="all">全部语言</option>
+                <option value="zh-CN">中文</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <div className="min-w-0 w-40">
               <Dropdown
                 options={categoryOptions}
                 value={activeCategory}

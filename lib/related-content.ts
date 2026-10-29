@@ -1,4 +1,5 @@
 import { searchPosts, type Post, type PostWithTags } from '@/lib/db'
+import { normalizeLanguage, type Language } from '@/lib/i18n'
 
 const VECTOR_NAMESPACE = 'posts'
 const DEFAULT_VECTOR_DIMENSIONS = 128
@@ -27,6 +28,7 @@ type PublicPostRow = Pick<
   | 'is_hidden'
   | 'deleted_at'
   | 'published_at'
+  | 'language'
 >
 
 function readFlag(value: unknown): boolean {
@@ -147,7 +149,7 @@ async function getVectorDimensions(index: VectorizeIndex): Promise<number> {
   }
 }
 
-async function fetchPostsBySlugs(db: D1Database, slugs: string[]): Promise<PostWithTags[]> {
+async function fetchPostsBySlugs(db: D1Database, slugs: string[], language: Language): Promise<PostWithTags[]> {
   if (slugs.length === 0) return []
 
   const placeholders = slugs.map(() => '?').join(', ')
@@ -158,9 +160,10 @@ async function fetchPostsBySlugs(db: D1Database, slugs: string[]): Promise<PostW
          AND status = 'published'
          AND password IS NULL
          AND is_hidden = 0
-         AND deleted_at IS NULL`
+         AND deleted_at IS NULL
+         AND language = ?`
     )
-    .bind(...slugs)
+    .bind(...slugs, language)
     .all<Post>()
 
   const order = new Map(slugs.map((slug, index) => [slug, index]))
@@ -175,6 +178,7 @@ async function tryVectorLookup(
   queryText: string,
   excludeSlug: string | null,
   limit: number,
+  language: Language,
 ): Promise<PostWithTags[] | null> {
   if (!isVectorizeEnabled(env)) return null
 
@@ -197,7 +201,7 @@ async function tryVectorLookup(
     if (slugs.length === 0) return []
 
     const uniqueSlugs = Array.from(new Set(slugs))
-    const posts = await fetchPostsBySlugs(db, uniqueSlugs)
+    const posts = await fetchPostsBySlugs(db, uniqueSlugs, language)
     return posts.slice(0, limit)
   } catch (error) {
     console.warn('Vector lookup failed, falling back to FTS/rules:', error)
@@ -256,7 +260,8 @@ function scoreCandidate(candidate: PostWithTags, current: PostWithTags, currentT
 
 async function getRuleBasedRelatedPosts(db: D1Database, current: PostWithTags, limit: number): Promise<PostWithTags[]> {
   const query = buildRelatedQuery(current)
-  const fromSearch = query ? await searchPosts(db, query, Math.max(limit * 4, 12)) : []
+  const language = normalizeLanguage(current.language)
+  const fromSearch = query ? await searchPosts(db, query, Math.max(limit * 4, 12), false, false, false, false, language) : []
   const recentResult = await db
     .prepare(
       `SELECT * FROM posts
@@ -265,10 +270,11 @@ async function getRuleBasedRelatedPosts(db: D1Database, current: PostWithTags, l
          AND password IS NULL
          AND is_hidden = 0
          AND deleted_at IS NULL
+         AND language = ?
        ORDER BY published_at DESC
        LIMIT ?`
     )
-    .bind(current.slug, Math.max(limit * 12, 48))
+    .bind(current.slug, language, Math.max(limit * 12, 48))
     .all<Post>()
 
   const merged = new Map<string, PostWithTags>()
@@ -293,6 +299,7 @@ async function getRuleBasedRelatedPosts(db: D1Database, current: PostWithTags, l
 
 type SearchPostsWithStrategyOptions = {
   limit?: number
+  language?: Language
 }
 
 export async function searchPostsWithStrategy(
@@ -302,12 +309,13 @@ export async function searchPostsWithStrategy(
   options: SearchPostsWithStrategyOptions = {},
 ): Promise<RelatedSearchResult> {
   const limit = options.limit ?? 20
+  const language = normalizeLanguage(options.language)
   const trimmedQuery = query.trim()
   if (!trimmedQuery) {
     return { strategy: isVectorizeEnabled(env) ? 'vectorize' : 'fts', source: 'rules', results: [] }
   }
 
-  const vectorResults = await tryVectorLookup(db, env, trimmedQuery, null, limit)
+  const vectorResults = await tryVectorLookup(db, env, trimmedQuery, null, limit, language)
   if (vectorResults && vectorResults.length > 0) {
     return {
       strategy: 'vectorize',
@@ -319,7 +327,7 @@ export async function searchPostsWithStrategy(
   return {
     strategy: 'fts',
     source: 'fts',
-    results: await searchPosts(db, trimmedQuery, limit),
+    results: await searchPosts(db, trimmedQuery, limit, false, false, false, false, language),
   }
 }
 
@@ -329,7 +337,8 @@ export async function getRelatedPosts(
   post: PostWithTags,
   limit = 3,
 ): Promise<RelatedSearchResult> {
-  const vectorResults = await tryVectorLookup(db, env, buildPostVectorText(post), post.slug, limit)
+  const language = normalizeLanguage(post.language)
+  const vectorResults = await tryVectorLookup(db, env, buildPostVectorText(post), post.slug, limit, language)
   if (vectorResults && vectorResults.length > 0) {
     return {
       strategy: 'vectorize',
@@ -350,7 +359,7 @@ export async function getRelatedPosts(
   return {
     strategy: 'fts',
     source: 'fts',
-    results: (await searchPosts(db, buildRelatedQuery(post) || post.title, limit + 1))
+    results: (await searchPosts(db, buildRelatedQuery(post) || post.title, limit + 1, false, false, false, false, language))
       .filter((candidate) => candidate.slug !== post.slug)
       .slice(0, limit),
   }
@@ -359,7 +368,7 @@ export async function getRelatedPosts(
 async function getPostForIndexing(db: D1Database, postId: number): Promise<PublicPostRow | null> {
   return db
     .prepare(
-      `SELECT id, slug, title, content, description, category, tags, status, password, is_hidden, deleted_at, published_at
+      `SELECT id, slug, title, content, description, category, tags, status, password, is_hidden, deleted_at, published_at, language
        FROM posts
        WHERE id = ?`
     )
@@ -408,6 +417,7 @@ export async function syncPostToRelatedIndex(
       values,
       metadata: {
         slug: post.slug,
+        language: normalizeLanguage(post.language),
         title: post.title,
         category: post.category || '',
         tags: parseTags(post.tags),

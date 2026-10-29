@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { ArrowUp, ArrowDown, Plus, Save, Trash2 } from 'lucide-react'
 
 interface NavLink {
   label: string
+  label_en?: string
   url: string
   openInNewTab: boolean
 }
@@ -53,8 +55,16 @@ export function NavLinksEditor({ initialValue, onSave, saving }: Props) {
           <input
             className={`${inputCls} w-24`}
             placeholder="名称"
+            aria-label={`导航 ${idx + 1} 名称`}
             value={link.label}
             onChange={(e) => update(idx, 'label', e.target.value)}
+          />
+          <input
+            className={`${inputCls} w-36`}
+            placeholder="英文名称（可选）"
+            aria-label={`导航 ${idx + 1} 英文名称`}
+            value={link.label_en || ''}
+            onChange={(e) => update(idx, 'label_en', e.target.value)}
           />
           <input
             className={`${inputCls} flex-1 min-w-[180px]`}
@@ -71,21 +81,22 @@ export function NavLinksEditor({ initialValue, onSave, saving }: Props) {
             />
             新窗口
           </label>
-          <button onClick={() => moveUp(idx)} disabled={idx === 0} className={`${btnCls} bg-[var(--editor-soft)] text-[var(--editor-muted)] hover:text-[var(--editor-ink)] disabled:opacity-30`}>↑</button>
-          <button onClick={() => moveDown(idx)} disabled={idx === links.length - 1} className={`${btnCls} bg-[var(--editor-soft)] text-[var(--editor-muted)] hover:text-[var(--editor-ink)] disabled:opacity-30`}>↓</button>
-          <button onClick={() => remove(idx)} className={`${btnCls} text-red-500 hover:bg-rose-500/10`}>删除</button>
+          <button type="button" onClick={() => moveUp(idx)} disabled={idx === 0 || saving} title="上移" aria-label="上移" className={`${btnCls} bg-[var(--editor-soft)] text-[var(--editor-muted)] hover:text-[var(--editor-ink)] disabled:opacity-30`}><ArrowUp className="h-4 w-4" /></button>
+          <button type="button" onClick={() => moveDown(idx)} disabled={idx === links.length - 1 || saving} title="下移" aria-label="下移" className={`${btnCls} bg-[var(--editor-soft)] text-[var(--editor-muted)] hover:text-[var(--editor-ink)] disabled:opacity-30`}><ArrowDown className="h-4 w-4" /></button>
+          <button type="button" onClick={() => remove(idx)} disabled={saving} title="删除导航" aria-label="删除导航" className={`${btnCls} text-red-500 hover:bg-rose-500/10`}><Trash2 className="h-4 w-4" /></button>
         </div>
       ))}
 
       <div className="flex items-center gap-3 pt-2">
-        <button onClick={add} className={`${btnCls} bg-[var(--editor-soft)] text-[var(--editor-ink)] hover:bg-[var(--border-warm)]`}>
-          + 添加链接
+        <button type="button" onClick={add} disabled={saving} className={`${btnCls} inline-flex items-center gap-1.5 bg-[var(--editor-soft)] text-[var(--editor-ink)] hover:bg-[var(--border-warm)]`}>
+          <Plus className="h-4 w-4" /> 添加链接
         </button>
         <button
           onClick={() => onSave(JSON.stringify(links))}
           disabled={saving}
-          className={`${btnCls} bg-[var(--editor-accent)] text-[var(--editor-accent-ink)] hover:brightness-105 disabled:opacity-60`}
+          className={`${btnCls} inline-flex items-center gap-1.5 bg-[var(--editor-accent)] text-[var(--editor-accent-ink)] hover:brightness-105 disabled:opacity-60`}
         >
+          <Save className="h-4 w-4" />
           {saving ? '保存中…' : '保存导航'}
         </button>
       </div>

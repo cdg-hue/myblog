@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FONT_PRESETS, THEME_OPTIONS, type BodyFont, type Theme } from '@/lib/appearance'
+import { FONT_PRESETS, SITE_THEME, THEME_OPTIONS, type BodyFont, type Theme } from '@/lib/appearance'
 
 interface Props {
   initialTheme: Theme
@@ -10,8 +10,8 @@ interface Props {
   saving: boolean
 }
 
-export function ThemeManager({ initialTheme, initialFont, onSave, saving }: Props) {
-  const [selectedTheme, setSelectedTheme] = useState<Theme>(initialTheme)
+export function ThemeManager({ initialFont, onSave, saving }: Props) {
+  const selectedTheme = SITE_THEME
   const [selectedFont, setSelectedFont] = useState<BodyFont>(initialFont)
 
   const currentFont = FONT_PRESETS.find((preset) => preset.id === selectedFont) || FONT_PRESETS[0]
@@ -19,15 +19,12 @@ export function ThemeManager({ initialTheme, initialFont, onSave, saving }: Prop
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h3 className="text-base font-medium text-[var(--editor-ink)]">默认主题</h3>
-        <p className="text-sm text-[var(--editor-muted)]">
-          这里设置的是网站首次访问时的默认主题。访客后续如果自己切换主题，会优先使用本地保存的偏好。
-        </p>
+        <h3 className="text-base font-medium text-[var(--editor-ink)]">网站主题</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {THEME_OPTIONS.map((theme) => (
             <label
               key={theme.id}
-              className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+              className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
                 selectedTheme === theme.id
                   ? 'border-[var(--editor-accent)] bg-[var(--editor-accent)]/5'
                   : 'border-[var(--editor-line)] bg-[var(--editor-panel)] hover:border-[var(--editor-soft)]'
@@ -38,7 +35,7 @@ export function ThemeManager({ initialTheme, initialFont, onSave, saving }: Prop
                 name="default-theme"
                 value={theme.id}
                 checked={selectedTheme === theme.id}
-                onChange={() => setSelectedTheme(theme.id)}
+                disabled
                 className="mt-1 accent-[var(--editor-accent)]"
               />
               <div className="min-w-0 flex-1">

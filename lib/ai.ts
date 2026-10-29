@@ -331,6 +331,7 @@ export interface TransformOptions {
   profileId?: number
   db?: D1Database
   env?: AIEnv
+  rejectTruncated?: boolean
 }
 
 /** 编辑器 AI 操作（支持动态 prompt + custom 自由输入） */
@@ -345,6 +346,12 @@ export async function transformEditorSelectionStream(
   const config = await resolveConfig(options.env, options.db, options.profileId)
   if (config.strategy === 'disabled') {
     throw new Error(config.reason)
+  }
+  const outputStream = (payload: { content: string; finishReason?: string }) => {
+    if (options.rejectTruncated && /^(length|max_tokens|max_output_tokens)$/.test(payload.finishReason || '')) {
+      throw new Error('AI 达到输出长度上限，请调高模型输出长度后重试当前分段')
+    }
+    return createTextStream(payload.content)
   }
 
   let systemPrompt: string
@@ -386,7 +393,7 @@ export async function transformEditorSelectionStream(
     })
     const primary = getWorkersAiAssistantPayload(primaryRaw)
     if (primary.content) {
-      return createTextStream(primary.content)
+      return outputStream(primary)
     }
 
     if (shouldRetryAssistantPayload(primary)) {
@@ -397,12 +404,12 @@ export async function transformEditorSelectionStream(
       })
       const retried = getWorkersAiAssistantPayload(retriedRaw)
       if (retried.content) {
-        return createTextStream(retried.content)
+        return outputStream(retried)
       }
     }
 
     const output = extractWorkersAiText(primaryRaw)
-    return createTextStream(output)
+    return outputStream({ ...primary, content: output })
   }
 
   if (isWorkersAiBaseUrl(config.baseURL)) {
@@ -435,7 +442,7 @@ export async function transformEditorSelectionStream(
     const primaryPayload = await runCompatRequest(messages, config.maxTokens)
     const primary = getWorkersAiAssistantPayload(primaryPayload)
     if (primary.content) {
-      return createTextStream(primary.content)
+      return outputStream(primary)
     }
 
     if (shouldRetryAssistantPayload(primary)) {
@@ -445,11 +452,11 @@ export async function transformEditorSelectionStream(
       )
       const retried = getWorkersAiAssistantPayload(retryPayload)
       if (retried.content) {
-        return createTextStream(retried.content)
+        return outputStream(retried)
       }
     }
 
-    return createTextStream(extractWorkersAiText(primaryPayload))
+    return outputStream({ ...primary, content: extractWorkersAiText(primaryPayload) })
   }
 
   const client = getClientFromConfig(config)
@@ -462,7 +469,7 @@ export async function transformEditorSelectionStream(
   })
   const primary = await collectStreamText(primaryStream)
   if (primary.content) {
-    return createTextStream(primary.content)
+    return outputStream(primary)
   }
 
   if (shouldRetryAssistantPayload(primary)) {
@@ -475,11 +482,11 @@ export async function transformEditorSelectionStream(
     })
     const retried = await collectStreamText(retryStream)
     if (retried.content) {
-      return createTextStream(retried.content)
+      return outputStream(retried)
     }
   }
 
-  return createTextStream('')
+  return outputStream({ ...primary, content: '' })
 }
 
 export async function processPost(
@@ -488,6 +495,7 @@ export async function processPost(
   env?: AIEnv,
   retries = 2,
   db?: D1Database,
+  language: import('@/lib/i18n').Language = 'zh-CN',
 ): Promise<AIProcessResult | null> {
   let lastError: Error | null = null
   const resolved = db ? await resolveConfig(env, db) : resolveEnv(env)
@@ -506,7 +514,7 @@ export async function processPost(
   "category": "从【技术、生活、读书、思考、旅行】中选择最合适的",
   "description": "生成 120-160 字符的 SEO 描述",
   "tags": ["提取 3-5 个关键标签"]
-}`,
+}\n\n${language === 'en' ? 'The article is in English. Write description and tags in English, even though the JSON schema examples above are Chinese. Keep category as one of the specified Chinese category names because categories are shared.' : '摘要和标签使用简体中文。'}`,
         },
         {
           role: 'user',

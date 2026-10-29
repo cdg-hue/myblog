@@ -1,6 +1,7 @@
 'use client'
 
 import type { Theme } from '@/components/HomeClient'
+import { usePublicLocale } from '@/components/PublicLocale'
 
 const THEMES: { id: Theme; label: string; short: string }[] = [
   { id: 'default', label: '默认', short: '0' },
@@ -15,6 +16,7 @@ interface ThemeSwitcherProps {
 }
 
 export function ThemeSwitcher({ theme, onThemeChange }: ThemeSwitcherProps) {
+  const { language, t: tLabel } = usePublicLocale()
   return (
     <div
       style={{
@@ -41,7 +43,7 @@ export function ThemeSwitcher({ theme, onThemeChange }: ThemeSwitcherProps) {
           <button
             key={t.id}
             onClick={() => onThemeChange(t.id)}
-            title={`切换到${t.label}主题`}
+            title={language === 'en' ? `Use ${tLabel(t.label)} theme` : `切换到${t.label}主题`}
             style={{
               padding: '7px 15px',
               borderRadius: 999,
@@ -71,7 +73,7 @@ export function ThemeSwitcher({ theme, onThemeChange }: ThemeSwitcherProps) {
             }}>
               {t.short}
             </span>
-            {t.label}
+            {tLabel(t.label)}
           </button>
         )
       })}

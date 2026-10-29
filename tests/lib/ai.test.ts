@@ -58,6 +58,16 @@ describe('ai transformEditorSelectionStream', () => {
     vi.clearAllMocks()
   })
 
+  it('rejects provider truncation for full translation even when the returned JSON is valid', async () => {
+    mocks.createCompletion.mockResolvedValueOnce(buildStream([
+      { content: '[{"id":"body:0","text":"Short text"}]', finish_reason: 'length' },
+    ]))
+    await expect(transformEditorSelectionStream('原始文本', 'custom', {
+      customPrompt: 'Translate every fragment', rejectTruncated: true,
+      env: { AI_API_KEY: 'test-key', AI_BASE_URL: 'https://provider.example/v1', AI_MODEL: 'test-model' },
+    })).rejects.toThrow('输出长度')
+  })
+
   it('retries when the provider streams reasoning only before the final answer', async () => {
     mocks.createCompletion
       .mockResolvedValueOnce(buildStream([

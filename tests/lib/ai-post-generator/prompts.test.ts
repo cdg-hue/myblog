@@ -31,6 +31,13 @@ const coverGenerator: AiPostGeneratorRow = {
 }
 
 describe('ai-post-generator/prompts', () => {
+  it('generates English metadata without replacing the saved custom prompt', () => {
+    const prompt = buildTextSystemPrompt('summary', '自定义中文编辑要求', 'en')
+    expect(prompt).toContain('自定义中文编辑要求')
+    expect(prompt).toContain('Write the result in English')
+    expect(prompt).toContain('{"summary":"..."}')
+    expect(buildTextSystemPrompt('tags', '自定义标签要求', 'en')).toContain('English topic tags')
+  })
   it('builds a summary context block from non-empty sections and truncates content', () => {
     const context = buildContextBlock({
       title: '测试标题',

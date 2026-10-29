@@ -16,13 +16,18 @@ CREATE TABLE posts (
   deleted_at INTEGER, -- 软删除时间戳，NULL 表示未删除
   published_at INTEGER DEFAULT (strftime('%s', 'now')),
   updated_at INTEGER DEFAULT (strftime('%s', 'now')),
-  view_count INTEGER DEFAULT 0
+  view_count INTEGER DEFAULT 0,
+  language TEXT NOT NULL DEFAULT 'zh-CN' CHECK (language IN ('zh-CN', 'en')),
+  translation_group_id TEXT
 );
 
 -- 索引
 CREATE INDEX idx_posts_slug ON posts(slug);
 CREATE INDEX idx_posts_category ON posts(category);
 CREATE INDEX idx_posts_published ON posts(published_at DESC);
+CREATE INDEX idx_posts_language_published ON posts(language, status, deleted_at, published_at DESC);
+CREATE UNIQUE INDEX idx_posts_translation_language ON posts(translation_group_id, language)
+  WHERE translation_group_id IS NOT NULL AND deleted_at IS NULL;
 
 -- 全文搜索（SQLite FTS5）
 CREATE VIRTUAL TABLE posts_fts USING fts5(
@@ -39,13 +44,17 @@ CREATE TRIGGER posts_ai AFTER INSERT ON posts BEGIN
   VALUES (new.id, new.title, new.content);
 END;
 
-CREATE TRIGGER posts_au AFTER UPDATE ON posts BEGIN
-  UPDATE posts_fts SET title = new.title, content = new.content
-  WHERE rowid = new.id;
+CREATE TRIGGER posts_au AFTER UPDATE OF title, content ON posts
+WHEN old.title IS NOT new.title OR old.content IS NOT new.content BEGIN
+  INSERT INTO posts_fts(posts_fts, rowid, title, content)
+  VALUES ('delete', old.id, old.title, old.content);
+  INSERT INTO posts_fts(rowid, title, content)
+  VALUES (new.id, new.title, new.content);
 END;
 
 CREATE TRIGGER posts_ad AFTER DELETE ON posts BEGIN
-  DELETE FROM posts_fts WHERE rowid = old.id;
+  INSERT INTO posts_fts(posts_fts, rowid, title, content)
+  VALUES ('delete', old.id, old.title, old.content);
 END;
 
 -- 分类统计表
@@ -53,7 +62,8 @@ CREATE TABLE categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
   slug TEXT UNIQUE NOT NULL,
-  post_count INTEGER DEFAULT 0
+  post_count INTEGER DEFAULT 0,
+  name_en TEXT
 );
 
 -- 站点设置表

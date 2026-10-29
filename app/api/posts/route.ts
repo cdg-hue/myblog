@@ -14,6 +14,8 @@ import {
   parseJsonBody,
 } from '@/lib/server/route-helpers'
 import type { NextRequest } from 'next/server'
+import { isLanguage, normalizeLanguage } from '@/lib/i18n'
+import { isTranslationConflict } from '@/lib/repositories/translations'
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,11 +28,13 @@ export async function POST(req: NextRequest) {
     if (authError) return authError
 
     const payload = await parseJsonBody<Record<string, unknown>>(req)
+    if (payload.language !== undefined && !isLanguage(payload.language)) return jsonError('不支持的文章语言', 400)
     const title = typeof payload.title === 'string' ? payload.title.trim() : ''
     const content = typeof payload.content === 'string' ? payload.content.trim() : ''
     const rawHtml = typeof payload.html === 'string' ? payload.html.trim() : ''
     const payloadCategory = typeof payload.category === 'string' ? payload.category.trim() : ''
     const customSlug = typeof payload.slug === 'string' ? normalizePostSlug(payload.slug) : ''
+    if (customSlug === 'en') return jsonError('en 是语言页面的保留地址，请更换 slug', 400)
     const status = payload.status === 'draft' ? 'draft' : 'published'
     const password = typeof payload.password === 'string' && payload.password.trim() ? payload.password.trim() : null
     const is_hidden = payload.is_hidden === 1 ? 1 : 0
@@ -79,6 +83,7 @@ export async function POST(req: NextRequest) {
       password,
       is_hidden,
       cover_image: coverImage,
+      language: normalizeLanguage(payload.language),
     })
 
     // 6. 清除缓存
@@ -114,8 +119,10 @@ export async function POST(req: NextRequest) {
       tags,
       description,
       cover_image: coverImage,
+      language: normalizeLanguage(payload.language),
     })
   } catch (error) {
+    if (isTranslationConflict(error)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (error instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(error.message)) {
       return jsonError('slug 已存在，请换一个', 409)
     }
@@ -135,12 +142,14 @@ export async function PATCH(req: NextRequest) {
     if (authError) return authError
 
     const payload = await parseJsonBody<Record<string, unknown>>(req)
+    if (payload.language !== undefined && !isLanguage(payload.language)) return jsonError('不支持的文章语言', 400)
     const currentSlug = typeof payload.current_slug === 'string'
       ? payload.current_slug.trim()
       : (typeof payload.slug === 'string' ? payload.slug.trim() : '')
     const nextSlug = typeof payload.new_slug === 'string'
       ? normalizePostSlug(payload.new_slug)
       : ''
+    if (nextSlug === 'en') return jsonError('en 是语言页面的保留地址，请更换 slug', 400)
 
     if (!currentSlug) {
       return jsonError('slug 不能为空', 400)
@@ -160,6 +169,7 @@ export async function PATCH(req: NextRequest) {
     if (payload.category !== undefined) updates.category = payload.category
     if (payload.tags !== undefined) updates.tags = payload.tags
     if (payload.cover_image !== undefined) updates.cover_image = payload.cover_image
+    if (isLanguage(payload.language)) updates.language = payload.language
     if (payload.status === 'draft' || payload.status === 'published' || payload.status === 'deleted') {
       updates.status = payload.status
     }
@@ -175,6 +185,7 @@ export async function PATCH(req: NextRequest) {
 
     return jsonOk({ success: true, slug: nextSlug || currentSlug })
   } catch (error) {
+    if (isTranslationConflict(error)) return jsonError('文章已有同语言译文，请先解除关联', 409)
     if (error instanceof Error && /UNIQUE constraint failed: posts\.slug/i.test(error.message)) {
       return jsonError('slug 已存在，请换一个', 409)
     }

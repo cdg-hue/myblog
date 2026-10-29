@@ -1,30 +1,17 @@
 export const THEME_STORAGE_KEY = 'qm_site_theme'
 export const THEME_CHANGE_EVENT = 'qm-theme-change'
+export const SITE_THEME = 'editorial'
+
+// Keep legacy IDs compatible with the original template source files.
+export type Theme = 'default' | 'refined' | 'editorial' | 'terminal'
 
 export const THEME_OPTIONS = [
   {
-    id: 'default',
-    label: '默认',
-    description: '温暖、克制的阅读首页',
-  },
-  {
-    id: 'refined',
-    label: '精致极简',
-    description: '更轻、更专注的杂志式列表',
-  },
-  {
-    id: 'editorial',
+    id: SITE_THEME,
     label: '杂志编辑',
     description: '更强视觉层次的刊物风格',
   },
-  {
-    id: 'terminal',
-    label: 'AI 终端',
-    description: '偏技术感的深色终端界面',
-  },
 ] as const
-
-export type Theme = (typeof THEME_OPTIONS)[number]['id']
 
 export const FONT_PRESETS = [
   {
@@ -72,20 +59,12 @@ export function isTheme(value: string | null | undefined): value is Theme {
   return THEME_OPTIONS.some((option) => option.id === value)
 }
 
-export function normalizeTheme(value: string | null | undefined, fallback: Theme = 'default'): Theme {
-  return isTheme(value) ? value : fallback
+export function normalizeTheme(value: string | null | undefined): Theme {
+  return isTheme(value) ? value : SITE_THEME
 }
 
 export function getClientThemePreference(fallback: Theme): Theme {
-  if (typeof window === 'undefined') return fallback
-
-  const saved = window.localStorage.getItem(THEME_STORAGE_KEY)
-  if (isTheme(saved)) return saved
-
-  const attr = document.documentElement.getAttribute('data-theme')
-  if (isTheme(attr)) return attr
-
-  return fallback
+  return normalizeTheme(fallback)
 }
 
 export function subscribeToThemeChange(onStoreChange: () => void): () => void {
