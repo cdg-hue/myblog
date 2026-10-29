@@ -3,10 +3,12 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
 
 const devConfigPath = process.env.CLOUDFLARE_DEV_CONFIG;
-void initOpenNextCloudflareForDev(devConfigPath ? {
-  configPath: devConfigPath,
-  persist: { path: process.env.CLOUDFLARE_DEV_PERSIST_PATH || '.wrangler/bilingual-preview-state' },
-} : undefined);
+if (process.env.NODE_ENV === 'development') {
+  void initOpenNextCloudflareForDev(devConfigPath ? {
+    configPath: devConfigPath,
+    persist: { path: process.env.CLOUDFLARE_DEV_PERSIST_PATH || '.wrangler/bilingual-preview-state' },
+  } : undefined);
+}
 
 const nextConfig: NextConfig = {
   // 图片优化（Cloudflare 有自己的优化）
